@@ -2,6 +2,7 @@
   "name": "medquestoes",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
@@ -15,6 +16,10 @@
     "vinext": "latest"
   },
   "devDependencies": {
-    "@vitejs/plugin-rsc": "^0.5.30"
+    "@cloudflare/vite-plugin": "latest",
+    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-rsc": "^0.5.30",
+    "react-server-dom-webpack": "19.2.6",
+    "vite": "latest"
   }
 }
