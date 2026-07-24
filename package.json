@@ -3,15 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build && cp -r out dist",
+    "dev": "vinext dev",
+    "build": "vinext build",
     "start": "next start"
   },
   "dependencies": {
     "next": "15.5.7",
     "pdfjs-dist": "5.3.93",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "vinext": "latest"
   },
   "devDependencies": {}
 }
