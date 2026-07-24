@@ -14,5 +14,7 @@
     "react-dom": "19.2.6",
     "vinext": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vitejs/plugin-rsc": "^0.5.30"
+  }
 }
