@@ -4,22 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json",
-    "start": "next start"
+    "dev": "vite",
+    "build": "vite build && mkdir -p dist/.openai && cp .openai/hosting.json dist/.openai/hosting.json",
+    "start": "vite preview"
   },
   "dependencies": {
-    "next": "15.5.7",
     "pdfjs-dist": "5.3.93",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "vinext": "latest"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "latest",
     "@vitejs/plugin-react": "latest",
-    "@vitejs/plugin-rsc": "^0.5.30",
-    "react-server-dom-webpack": "19.2.6",
     "vite": "latest"
   }
 }
