@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 
 const periods = [
-  { value: "7", label: "Últimos 7 dias" },
-  { value: "30", label: "Últimos 30 dias" },
-  { value: "90", label: "Últimos 3 meses" },
+  { value: "7", label: "Última semana" },
+  { value: "30", label: "Último mês" },
   { value: "365", label: "Último ano" },
+  { value: "month", label: "Mês específico" },
   { value: "all", label: "Todo o período" }
 ];
 
@@ -38,16 +38,18 @@ function keyToUtcDate(key) {
 
 export default function Dashboard({ attempts }) {
   const [period, setPeriod] = useState("30");
+  const [selectedMonth, setSelectedMonth] = useState(() => dateKeyInStudyZone(new Date()).slice(0, 7));
   const [area, setArea] = useState("Todas");
 
   const areas = useMemo(() => [...new Set(attempts.map(a => a.area))].sort(), [attempts]);
   const filtered = useMemo(() => {
-    const cutoff = period === "all" ? 0 : Date.now() - Number(period) * 86400000;
+    const cutoff = ["all", "month"].includes(period) ? 0 : Date.now() - Number(period) * 86400000;
     return attempts.filter(a =>
       (area === "Todas" || a.area === area) &&
+      (period !== "month" || dateKeyInStudyZone(a.answeredAt).startsWith(selectedMonth)) &&
       new Date(a.answeredAt).getTime() >= cutoff
     );
-  }, [attempts, area, period]);
+  }, [attempts, area, period, selectedMonth]);
 
   const correct = filtered.filter(a => a.correct).length;
   const rate = filtered.length ? Math.round(correct / filtered.length * 100) : 0;
@@ -64,17 +66,23 @@ export default function Dashboard({ attempts }) {
   }, [filtered]);
 
   const daily = useMemo(() => {
-    if (!filtered.length) return [];
     const todayKey = dateKeyInStudyZone(new Date());
     const today = keyToUtcDate(todayKey);
-    const configuredDays = period === "all" ? null : Number(period);
+    const configuredDays = ["all", "month"].includes(period) ? null : Number(period);
     const firstAttemptKey = [...filtered]
       .map(item => dateKeyInStudyZone(item.answeredAt))
-      .sort()[0];
-    const firstAttempt = keyToUtcDate(firstAttemptKey);
-    const start = configuredDays
-      ? new Date(today.getTime() - (configuredDays - 1) * 86400000)
-      : firstAttempt;
+      .sort()[0] || todayKey;
+    let start;
+    let end = today;
+    if (period === "month") {
+      const [year, month] = selectedMonth.split("-").map(Number);
+      start = new Date(Date.UTC(year, month - 1, 1, 12));
+      end = new Date(Date.UTC(year, month, 0, 12));
+    } else {
+      start = configuredDays
+        ? new Date(today.getTime() - (configuredDays - 1) * 86400000)
+        : keyToUtcDate(firstAttemptKey);
+    }
     const grouped = {};
     filtered.forEach(item => {
       const key = dateKeyInStudyZone(item.answeredAt);
@@ -83,7 +91,7 @@ export default function Dashboard({ attempts }) {
       if (item.correct) grouped[key].correct += 1;
     });
     const days = [];
-    for (let cursor = new Date(start); cursor <= today; cursor = new Date(cursor.getTime() + 86400000)) {
+    for (let cursor = new Date(start); cursor <= end; cursor = new Date(cursor.getTime() + 86400000)) {
       const date = new Date(cursor);
       const key = date.toISOString().slice(0, 10);
       const values = grouped[key] || { total: 0, correct: 0 };
@@ -95,7 +103,11 @@ export default function Dashboard({ attempts }) {
       });
     }
     return days;
-  }, [filtered, period]);
+  }, [filtered, period, selectedMonth]);
+  const periodLabel = period === "month"
+    ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" })
+      .format(keyToUtcDate(`${selectedMonth}-01`))
+    : periods.find(p => p.value === period)?.label;
   const dailyMax = Math.max(1, ...daily.map(day => day.total));
   const lifetimeGame = useMemo(() => {
     const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
@@ -114,11 +126,12 @@ export default function Dashboard({ attempts }) {
     <section className="dashboard-page">
       <div className="dashboard-heading"><div><span className="eyebrow">SEU PROGRESSO</span><h1>Desempenho</h1><p>Acompanhe seus resultados por período e área médica.</p></div>
         <div className="dashboard-filters"><label>Período<select value={period} onChange={e => setPeriod(e.target.value)}>{periods.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
+          {period === "month" && <label>Mês<input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} /></label>}
           <label>Área<select value={area} onChange={e => setArea(e.target.value)}><option>Todas</option>{areas.map(x => <option key={x}>{x}</option>)}</select></label></div>
       </div>
       <div className="metric-grid"><div className="metric"><span>Questões respondidas</span><b>{filtered.length}</b></div><div className="metric"><span>Respostas corretas</span><b>{correct}</b></div><div className="metric"><span>Melhor sequência</span><b>🔥 {lifetimeGame.best}</b></div><div className="metric accent"><span>Aproveitamento</span><b>{rate}%</b></div></div>
-      <div className="chart-card daily-card"><div className="chart-title"><div><h2>Evolução dia após dia</h2><small>Quantidade respondida e acertos em cada dia</small></div><span>{periods.find(p => p.value === period)?.label}</span></div>
-        {daily.length ? <div className="daily-scroll"><div className="daily-chart" style={{ minWidth: `${Math.max(680, daily.length * 42)}px` }}>
+      <div className="chart-card daily-card"><div className="chart-title"><div><h2>Evolução dia após dia</h2><small>Quantidade respondida e acertos em cada dia</small></div><span>{periodLabel}</span></div>
+        {daily.length ? <div className="daily-scroll"><div className="daily-chart" style={{ width: `${Math.max(680, daily.length * 56)}px` }}>
           {daily.map(day => {
             const height = day.total ? Math.max(12, day.total / dailyMax * 100) : 3;
             const correctHeight = day.total ? day.correct / day.total * 100 : 0;
@@ -134,7 +147,7 @@ export default function Dashboard({ attempts }) {
         </div></div> : <div className="chart-empty">Responda algumas questões para visualizar sua evolução diária.</div>}
         {daily.length > 0 && <div className="daily-legend"><span><i className="answered-dot" />Respondidas</span><span><i className="correct-dot" />Proporção de acertos</span></div>}
       </div>
-      <div className="chart-card"><div className="chart-title"><h2>Desempenho por área</h2><span>{periods.find(p => p.value === period)?.label}</span></div>
+      <div className="chart-card"><div className="chart-title"><h2>Desempenho por área</h2><span>{periodLabel}</span></div>
         {byArea.length ? <div className="bar-chart">{byArea.map(item => <div className="bar-row" key={item.name}><div className="bar-label"><span>{item.name}</span><small>{item.correct}/{item.total} acertos</small></div><div className="bar-track"><div className="bar-fill" style={{ width: `${item.rate}%` }} /></div><b>{item.rate}%</b></div>)}</div>
           : <div className="chart-empty">Responda algumas questões para visualizar seu desempenho.</div>}
       </div>

@@ -54,7 +54,7 @@ export async function loadQuestions(seedQuestions) {
 
   if (stored.length) {
     const merged = [...new Map(
-      [...seedQuestions, ...stored].map(question => [String(question.id), question])
+      [...stored, ...seedQuestions].map(question => [String(question.id), question])
     ).values()];
     if (merged.length !== stored.length) await saveQuestions(merged);
     return merged;

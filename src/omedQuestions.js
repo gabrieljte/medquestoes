@@ -1,4 +1,5 @@
 import { omedSupplemental } from "./omedSupplemental.js";
+import { omedClinicalQuestions } from "./omedClinicalQuestions.js";
 
 const coreOmedQuestions = [
   {
@@ -218,6 +219,29 @@ function rotateOptions(question, amount) {
   };
 }
 
+const evidenceByArea = {
+  "Cardiologia": "edital OMED Ciclo Clínico; diretrizes cardiovasculares vigentes",
+  "Pneumologia": "edital OMED; GINA 2025; GOLD 2026",
+  "Nefrologia": "edital OMED; KDIGO 2024",
+  "Urgência e Emergência": "edital OMED; AHA Guidelines for CPR and ECC 2025",
+  "Pediatria": "edital OMED; protocolos do Ministério da Saúde e da Sociedade Brasileira de Pediatria",
+  "Neonatologia": "edital OMED; diretrizes de reanimação neonatal e Sociedade Brasileira de Pediatria",
+  "Obstetrícia": "edital OMED; diretrizes nacionais de assistência à gestação e ao parto",
+  "Ginecologia": "edital OMED; recomendações FEBRASGO",
+  "Infectologia": "edital OMED; PCDT do Ministério da Saúde",
+  "Oncologia": "edital OMED; Diretrizes Diagnósticas e Terapêuticas do Ministério da Saúde",
+  "Medicina de Família e Comunidade": "edital OMED; protocolos e linhas de cuidado do Ministério da Saúde"
+};
+
+function addEvidence(question) {
+  const source = evidenceByArea[question.area] || "edital OMED Ciclo Clínico; protocolos e diretrizes oficiais da área";
+  if (question.explanation?.includes("Fonte-base:")) return question;
+  return {
+    ...question,
+    explanation: `${question.explanation} Fonte-base: ${source}.`
+  };
+}
+
 function buildOmedBank(baseQuestions, target) {
   const result = [];
   let round = 0;
@@ -241,6 +265,6 @@ function buildOmedBank(baseQuestions, target) {
 }
 
 export const omedQuestions = buildOmedBank(
-  [...coreOmedQuestions, ...omedSupplemental],
-  300
+  [...coreOmedQuestions, ...omedSupplemental, ...omedClinicalQuestions].map(addEvidence),
+  800
 );
