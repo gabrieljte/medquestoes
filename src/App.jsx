@@ -5,6 +5,8 @@ import { loadAttempts, loadQuestions, saveAttempt, saveAttempts, saveQuestions }
 import AuthScreen from "./AuthScreen.jsx";
 import Dashboard from "./Dashboard.jsx";
 import ListBuilder from "./ListBuilder.jsx";
+import Library from "./Library.jsx";
+import ClinicalCases from "./ClinicalCases.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -411,25 +413,30 @@ export default function Home() {
 
   return (
     <main className={`app-shell heat-${gameStats.stage}`}>
-      <header>
+      <aside className="nav-sidebar">
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
-        <nav>
-          <button className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}>Questões</button>
-          <button className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}>Criar lista</button>
-          <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Desempenho</button>
-          <button className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}>Adicionar</button>
+        <nav aria-label="Navegação principal">
+          <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>?</span><b>Questões</b></button>
+          <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>☷</span><b>Listas</b></button>
+          <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>▧</span><b>Biblioteca</b></button>
+          <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>♧</span><b>Casos clínicos</b></button>
+          <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>↗</span><b>Desempenho</b></button>
+          <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>＋</span><b>Adicionar</b></button>
         </nav>
-        <div className={`game-hud ${gameStats.currentStreak >= 3 ? "on-fire" : ""}`}>
-          <div className="streak-counter"><span>🔥</span><b>{gameStats.currentStreak}</b><small>sequência</small></div>
-          <div className="level-box"><span>Nível {gameStats.level}</span><div><i style={{ width: `${gameStats.progress}%` }} /></div><small>{gameStats.progress}/100 XP</small></div>
+        <div className="sidebar-bottom">
+          <div className={`game-hud ${gameStats.currentStreak >= 3 ? "on-fire" : ""}`}>
+            <div className="streak-counter"><span>🔥</span><b>{gameStats.currentStreak}</b><small>sequência</small></div>
+            <div className="level-box"><span>Nível {gameStats.level}</span><div><i style={{ width: `${gameStats.progress}%` }} /></div><small>{gameStats.progress}/100 XP</small></div>
+          </div>
+          <div className="account-box">
+            <span className={`db-status ${databaseReady && !syncError ? "online" : ""}`} title={syncError}>{syncing ? "↻ Sincronizando" : syncError ? `● ${syncError}` : session ? "● Sincronizado" : "● Modo offline"}</span>
+            <small>{session?.user?.email || "Neste dispositivo"}</small>
+            <button onClick={() => session ? supabase.auth.signOut() : setOfflineMode(false)}>{session ? "Sair" : "Entrar"}</button>
+          </div>
         </div>
-        <div className="account-box">
-          <span className={`db-status ${databaseReady && !syncError ? "online" : ""}`} title={syncError}>{syncing ? "↻ Sincronizando" : syncError ? `● ${syncError}` : session ? "● Sincronizado" : "● Modo offline"}</span>
-          <small>{session?.user?.email || "Neste dispositivo"}</small>
-          <button onClick={() => session ? supabase.auth.signOut() : setOfflineMode(false)}>{session ? "Sair" : "Entrar"}</button>
-        </div>
-      </header>
+      </aside>
 
+      <div className="app-content">
       {tab === "questoes" ? (
         <>
           <section className={hasSearched ? "workspace" : "filter-landing"}>
@@ -487,6 +494,10 @@ export default function Home() {
         </>
       ) : tab === "listas" ? (
         <ListBuilder questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
+      ) : tab === "biblioteca" ? (
+        <Library areas={Object.keys(topicMap)} />
+      ) : tab === "casos" ? (
+        <ClinicalCases />
       ) : tab === "dashboard" ? (
         <Dashboard attempts={attempts} />
       ) : (
@@ -517,8 +528,9 @@ export default function Home() {
           </div>
         </section>
       )}
-      {notice && <div className="toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       <footer>MedQuestões • Ferramenta de apoio aos estudos — conteúdo não substitui orientação clínica.</footer>
+      </div>
+      {notice && <div className="toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
     </main>
   );
 }
