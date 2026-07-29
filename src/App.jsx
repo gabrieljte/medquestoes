@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadAttempts, loadQuestions, saveAttempt, saveAttempts, saveQuestions } from "./db.js";
 import AuthScreen from "./AuthScreen.jsx";
 import Dashboard from "./Dashboard.jsx";
+import ListBuilder from "./ListBuilder.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -123,6 +124,10 @@ export default function Home() {
   const [difficulty, setDifficulty] = useState("Todas");
   const [tag, setTag] = useState("Todas");
   const [answerStatus, setAnswerStatus] = useState("Não respondidas");
+  const [activeList, setActiveList] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("medquestoes-active-list") || "null"); }
+    catch { return null; }
+  });
   const [reviewedQuestionId, setReviewedQuestionId] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [page, setPage] = useState(1);
@@ -213,7 +218,12 @@ export default function Home() {
   const answeredCount = questions.filter(question => answeredIds.has(String(question.id))).length;
   const studyProgress = questions.length ? Math.round(answeredCount / questions.length * 100) : 0;
 
-  const filtered = useMemo(() => questions.filter(q => {
+  const filtered = useMemo(() => {
+    if (activeList?.ids?.length) {
+      const byId = new Map(questions.map(question => [String(question.id), question]));
+      return activeList.ids.map(id => byId.get(String(id))).filter(Boolean);
+    }
+    return questions.filter(q => {
     const attempt = latestAttemptByQuestion.get(String(q.id));
     const matchesStatus =
       answerStatus === "Todas" ||
@@ -226,7 +236,8 @@ export default function Home() {
       (tag === "Todas" || (q.tag || "Banco geral") === tag) &&
       matchesStatus &&
       (!search || q.text.toLowerCase().includes(search.toLowerCase()));
-  }), [questions, area, topic, difficulty, tag, answerStatus, search, latestAttemptByQuestion, reviewedQuestionId]);
+    });
+  }, [questions, area, topic, difficulty, tag, answerStatus, search, latestAttemptByQuestion, reviewedQuestionId, activeList]);
 
   const gameStats = useMemo(() => {
     const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
@@ -276,6 +287,10 @@ export default function Home() {
     setReviewedQuestionId(null);
   }, [area, topic, difficulty, tag, answerStatus, search]);
 
+  useEffect(() => {
+    if (activeList?.ids?.length) setHasSearched(true);
+  }, [activeList]);
+
   function changeArea(value) { setArea(value); setTopic("Todos"); }
   function retryQuestion(questionId) {
     setResponses(current => ({
@@ -285,6 +300,8 @@ export default function Home() {
     setNotice("Nova tentativa iniciada. A resposta anterior continuará no histórico.");
   }
   function clearFilters() {
+    setActiveList(null);
+    localStorage.removeItem("medquestoes-active-list");
     setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setAnswerStatus("Não respondidas"); setSearch("");
     setHasSearched(false); setPage(1);
   }
@@ -295,6 +312,30 @@ export default function Home() {
   function goToPage(nextPage) {
     setPage(nextPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function startCustomList(list) {
+    setActiveList(list);
+    localStorage.setItem("medquestoes-active-list", JSON.stringify(list));
+    setResponses(current => {
+      const next = { ...current };
+      list.ids.forEach(id => {
+        if (latestAttemptByQuestion.has(String(id))) {
+          next[id] = { selected: null, answered: false, retrying: true };
+        }
+      });
+      return next;
+    });
+    setPage(1);
+    setHasSearched(true);
+    setTab("questoes");
+    setNotice(`Lista “${list.name}” criada com ${list.ids.length} questões.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function closeCustomList() {
+    setActiveList(null);
+    localStorage.removeItem("medquestoes-active-list");
+    setHasSearched(false);
+    setPage(1);
   }
   function selectOption(questionId, option) {
     const localResponse = responses[questionId];
@@ -374,6 +415,7 @@ export default function Home() {
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav>
           <button className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}>Questões</button>
+          <button className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}>Criar lista</button>
           <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Desempenho</button>
           <button className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}>Adicionar</button>
         </nav>
@@ -405,6 +447,10 @@ export default function Home() {
               <button className="primary filter-submit" onClick={applyFilters}>Buscar questões</button>
             </aside>
             {hasSearched && <section className="question-area">
+              {activeList && <div className="active-list-banner">
+                <div><span>LISTA ATIVA</span><b>{activeList.name}</b><small>{activeList.ids.length} questões personalizadas</small></div>
+                <button type="button" onClick={closeCustomList}>Encerrar lista</button>
+              </div>}
               {filtered.length > pageSize && <div className="question-toolbar">
                 <span><b>{filtered.length}</b> questões · 10 por página</span>
                 <div className="page-squares" aria-label="Paginação">
@@ -439,6 +485,8 @@ export default function Home() {
             </section>}
           </section>
         </>
+      ) : tab === "listas" ? (
+        <ListBuilder questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
       ) : tab === "dashboard" ? (
         <Dashboard attempts={attempts} />
       ) : (
