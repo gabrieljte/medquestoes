@@ -122,6 +122,8 @@ export default function Home() {
   const [topic, setTopic] = useState("Todos");
   const [difficulty, setDifficulty] = useState("Todas");
   const [tag, setTag] = useState("Todas");
+  const [answerStatus, setAnswerStatus] = useState("Não respondidas");
+  const [reviewedQuestionId, setReviewedQuestionId] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -192,13 +194,31 @@ export default function Home() {
     return () => { active = false; };
   }, [session?.user?.id, databaseReady]);
 
-  const filtered = useMemo(() => questions.filter(q =>
-    (area === "Todas" || q.area === area) &&
-    (topic === "Todos" || q.topic === topic) &&
-    (difficulty === "Todas" || q.difficulty === difficulty) &&
-    (tag === "Todas" || (q.tag || "Banco geral") === tag) &&
-    (!search || q.text.toLowerCase().includes(search.toLowerCase()))
-  ), [questions, area, topic, difficulty, tag, search]);
+  const latestAttemptByQuestion = useMemo(() => {
+    const latest = new Map();
+    [...attempts]
+      .sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt))
+      .forEach(attempt => latest.set(String(attempt.questionId), attempt));
+    return latest;
+  }, [attempts]);
+  const answeredIds = useMemo(() => new Set(latestAttemptByQuestion.keys()), [latestAttemptByQuestion]);
+  const answeredCount = questions.filter(question => answeredIds.has(String(question.id))).length;
+  const studyProgress = questions.length ? Math.round(answeredCount / questions.length * 100) : 0;
+
+  const filtered = useMemo(() => questions.filter(q => {
+    const attempt = latestAttemptByQuestion.get(String(q.id));
+    const matchesStatus =
+      answerStatus === "Todas" ||
+      (answerStatus === "Não respondidas" && (!attempt || String(q.id) === reviewedQuestionId)) ||
+      (answerStatus === "Já respondidas" && Boolean(attempt)) ||
+      (answerStatus === "Respondidas incorretamente" && attempt && !attempt.correct);
+    return (area === "Todas" || q.area === area) &&
+      (topic === "Todos" || q.topic === topic) &&
+      (difficulty === "Todas" || q.difficulty === difficulty) &&
+      (tag === "Todas" || (q.tag || "Banco geral") === tag) &&
+      matchesStatus &&
+      (!search || q.text.toLowerCase().includes(search.toLowerCase()));
+  }), [questions, area, topic, difficulty, tag, answerStatus, search, latestAttemptByQuestion, reviewedQuestionId]);
 
   const gameStats = useMemo(() => {
     const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
@@ -245,11 +265,12 @@ export default function Home() {
   useEffect(() => {
     setHasSearched(false);
     setPage(1);
-  }, [area, topic, difficulty, tag, search]);
+    setReviewedQuestionId(null);
+  }, [area, topic, difficulty, tag, answerStatus, search]);
 
   function changeArea(value) { setArea(value); setTopic("Todos"); }
   function clearFilters() {
-    setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setSearch("");
+    setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setAnswerStatus("Não respondidas"); setSearch("");
     setHasSearched(false); setPage(1);
   }
   function applyFilters() {
@@ -277,6 +298,7 @@ export default function Home() {
       answeredAt: new Date().toISOString()
     };
     setResponses(r => ({ ...r, [question.id]: { ...response, answered: true } }));
+    setReviewedQuestionId(String(question.id));
     setAttempts(items => [...items, attempt]);
     setStats(s => ({ answered: s.answered + 1, correct: s.correct + (attempt.correct ? 1 : 0) }));
     const nextStreak = attempt.correct ? gameStats.currentStreak + 1 : 0;
@@ -360,7 +382,9 @@ export default function Home() {
               <label>Subtema<select value={topic} onChange={e => setTopic(e.target.value)}><option>Todos</option>{(area === "Todas" ? [...new Set(Object.values(topicMap).flat())] : topicMap[area]).map(x => <option key={x}>{x}</option>)}</select></label>
               <label>Dificuldade<select value={difficulty} onChange={e => setDifficulty(e.target.value)}><option>Todas</option><option>Fácil</option><option>Média</option><option>Difícil</option></select></label>
               <label>Banco de questões<select value={tag} onChange={e => setTag(e.target.value)}><option>Todas</option><option>OMED</option><option>Banco geral</option><option>Importada</option></select></label>
+              <label>Situação<select value={answerStatus} onChange={e => setAnswerStatus(e.target.value)}><option>Não respondidas</option><option>Já respondidas</option><option>Respondidas incorretamente</option><option>Todas</option></select></label>
               <div className="result-count"><b>{filtered.length}</b><span>questões encontradas</span></div>
+              <div className="study-progress"><div><span>Progresso do banco</span><b>{answeredCount}/{questions.length} · {studyProgress}%</b></div><span><i style={{ width: `${studyProgress}%` }} /></span></div>
               <button className="primary filter-submit" onClick={applyFilters}>Buscar questões</button>
             </aside>
             {hasSearched && <section className="question-area">
@@ -376,7 +400,8 @@ export default function Home() {
                 </div>
               </div>}
               {filtered.length ? visibleQuestions.map((q, questionIndex) => {
-                const response = responses[q.id] || {};
+                const savedAttempt = latestAttemptByQuestion.get(String(q.id));
+                const response = responses[q.id] || (savedAttempt ? { selected: savedAttempt.selectedAnswer, answered: true } : {});
                 return <article className="question-card" key={q.id}>
                   <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
                   <h2>{q.text}</h2>
@@ -387,7 +412,9 @@ export default function Home() {
                     return <button key={i} className={optionState} onClick={() => selectOption(q.id, i)}><b>{letters[i]}</b><span>{opt}</span>{response.answered && i === q.answer && <i>✓</i>}</button>;
                   })}</div>
                   {response.answered && <div className={`feedback ${response.selected === q.answer ? "good" : "bad"}`}><b>{response.selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
-                  <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button><button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button></div>
+                  <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button>{response.answered && answerStatus === "Não respondidas"
+                    ? <button className="primary" onClick={() => setReviewedQuestionId(null)}>Continuar →</button>
+                    : <button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button>}</div>
                 </article>;
               }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>}
