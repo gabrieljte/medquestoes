@@ -33,10 +33,13 @@ export async function syncQuestions(questions, userId) {
   if (!supabase || !userId) return questions;
 
   if (questions.length) {
-    const { error } = await supabase
-      .from("questions")
-      .upsert(questions.map(q => toCloudQuestion(q, userId)), { onConflict: "user_id,id" });
-    if (error) throw error;
+    const rows = questions.map(q => toCloudQuestion(q, userId));
+    for (let index = 0; index < rows.length; index += 50) {
+      const { error } = await supabase
+        .from("questions")
+        .upsert(rows.slice(index, index + 50), { onConflict: "user_id,id" });
+      if (error) throw error;
+    }
   }
 
   const { data, error } = await supabase

@@ -1,5 +1,6 @@
 :root{--ink:#12251f;--muted:#6b7d77;--line:#dce8e3;--bg:#f2f7f5;--teal:#087c70;--light:#e8f6f1}
 *{box-sizing:border-box}
+html,body,#root{max-width:100%;overflow-x:hidden}
 body{background:radial-gradient(circle at 8% 5%,rgba(41,180,145,.09),transparent 24rem),radial-gradient(circle at 92% 32%,rgba(28,112,105,.07),transparent 28rem),var(--bg);color:var(--ink)}
 button,input,select,textarea{font:inherit}
 button{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease}
@@ -23,6 +24,14 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .hero-stats>div{min-width:102px;padding:8px 14px}
 .hero-stats b{font-family:Manrope,sans-serif;letter-spacing:-.04em}
 .workspace{max-width:1500px;margin:0 auto;padding:28px 5vw 72px;grid-template-columns:minmax(240px,292px) minmax(0,1fr);gap:24px;background:transparent}
+.filter-landing{min-height:calc(100vh - 78px);display:grid;place-items:center;padding:48px 20px 72px}
+.filter-landing .filters{position:static;width:min(620px,100%);padding:36px;border-radius:28px}
+.filter-landing .side-title b{font-size:18px}
+.filter-intro{text-align:center;margin:10px 0 28px}
+.filter-intro .eyebrow{color:var(--teal)}
+.filter-intro h1{font:800 clamp(26px,4vw,38px)/1.15 Manrope;margin:10px auto 8px;letter-spacing:-.045em}
+.filter-intro p{max-width:450px;margin:0 auto;color:var(--muted);font-size:13px;line-height:1.6}
+.filter-submit{width:100%;margin-top:14px;padding:14px}
 .filters{position:sticky;top:102px;align-self:start;padding:22px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.88);box-shadow:0 10px 35px rgba(30,67,56,.07);backdrop-filter:blur(12px)}
 .filters h3{margin-top:0;font-family:Manrope,sans-serif}
 .filters input,.filters select,.panel input,.panel select,.panel textarea,.dashboard-filters select{border:1px solid #d6e3de;border-radius:11px;background:#fbfdfc;outline:none;transition:border-color .18s ease,box-shadow .18s ease,background .18s ease}
@@ -55,5 +64,7 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .auth-card{border:1px solid rgba(255,255,255,.32);border-radius:25px;padding:38px;box-shadow:0 28px 90px rgba(2,26,23,.38)}
 .auth-card input{border-radius:11px;background:#fbfdfc}
 .toast{box-shadow:0 14px 40px rgba(16,60,48,.18)}
+.pagination{display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 0 22px;color:var(--muted);font-size:12px}
+.pagination .next:disabled{opacity:.4;cursor:not-allowed}
 @media(max-width:850px){header{height:auto;min-height:70px;padding:10px 16px;gap:9px;flex-wrap:wrap}nav{order:3;width:100%;justify-content:space-between;overflow-x:auto}nav button{flex:1;white-space:nowrap;padding:8px 7px;font-size:11px}.account-box{margin-left:auto;min-width:0}.account-box small{display:none}.hero{margin:14px 14px 0;padding:38px 25px;border-radius:22px}.hero-stats{width:100%;overflow-x:auto}.workspace{grid-template-columns:1fr;padding:18px 14px 52px}.filters{position:static;padding:19px;border-radius:17px}.question-card{padding:24px 19px;border-radius:18px}.dashboard-heading{align-items:stretch}.dashboard-filters{display:grid;grid-template-columns:1fr 1fr}}
-@media(max-width:520px){.hero h1{font-size:30px}.hero-stats>div{min-width:88px;padding:6px 9px}.question-card h2{font-size:17px}.auth-card{padding:28px 22px;border-radius:20px}}
+@media(max-width:520px){.filter-landing{padding:22px 14px 48px;place-items:start center}.filter-landing .filters{padding:24px 19px;border-radius:20px}.hero h1{font-size:30px}.hero-stats>div{min-width:88px;padding:6px 9px}.question-card h2{font-size:17px}.auth-card{padding:28px 22px;border-radius:20px}.pagination{gap:8px}.pagination .next{padding:9px 10px}}

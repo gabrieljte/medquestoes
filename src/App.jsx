@@ -122,6 +122,8 @@ export default function Home() {
   const [topic, setTopic] = useState("Todos");
   const [difficulty, setDifficulty] = useState("Todas");
   const [tag, setTag] = useState("Todas");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [responses, setResponses] = useState({});
   const [stats, setStats] = useState({ answered: 0, correct: 0 });
@@ -132,6 +134,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
   const [importArea, setImportArea] = useState("Cardiologia");
   const [importTopic, setImportTopic] = useState("Doença isquêmica");
   const [draft, setDraft] = useState({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
@@ -169,6 +172,7 @@ export default function Home() {
     if (!session?.user?.id || !databaseReady) return;
     let active = true;
     setSyncing(true);
+    setSyncError("");
     Promise.all([
       syncQuestions(questions, session.user.id),
       syncAttempts(attempts, session.user.id)
@@ -179,9 +183,9 @@ export default function Home() {
       setQuestions(cloudQuestions);
       setAttempts(cloudAttempts);
       setStats({ answered: cloudAttempts.length, correct: cloudAttempts.filter(a => a.correct).length });
-      setNotice("Sincronização concluída.");
-    }).catch(() => {
-      if (active) setNotice("Sem conexão com a nuvem. Os dados continuam salvos neste dispositivo.");
+    }).catch((error) => {
+      console.error("Falha na sincronização:", error);
+      if (active) setSyncError(navigator.onLine ? "Falha ao sincronizar" : "Sem internet");
     }).finally(() => {
       if (active) setSyncing(false);
     });
@@ -196,7 +200,24 @@ export default function Home() {
     (!search || q.text.toLowerCase().includes(search.toLowerCase()))
   ), [questions, area, topic, difficulty, tag, search]);
 
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleQuestions = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    setHasSearched(false);
+    setPage(1);
+  }, [area, topic, difficulty, tag, search]);
+
   function changeArea(value) { setArea(value); setTopic("Todos"); }
+  function clearFilters() {
+    setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setSearch("");
+    setHasSearched(false); setPage(1);
+  }
+  function applyFilters() {
+    setPage(1);
+    setHasSearched(true);
+  }
   function selectOption(questionId, option) {
     if (responses[questionId]?.answered) return;
     setResponses(r => ({ ...r, [questionId]: { selected: option, answered: false } }));
@@ -270,7 +291,7 @@ export default function Home() {
           <button className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}>Adicionar</button>
         </nav>
         <div className="account-box">
-          <span className={`db-status ${databaseReady ? "online" : ""}`}>{syncing ? "↻ Sincronizando" : session ? "● Sincronizado" : "● Modo offline"}</span>
+          <span className={`db-status ${databaseReady && !syncError ? "online" : ""}`} title={syncError}>{syncing ? "↻ Sincronizando" : syncError ? `● ${syncError}` : session ? "● Sincronizado" : "● Modo offline"}</span>
           <small>{session?.user?.email || "Neste dispositivo"}</small>
           <button onClick={() => session ? supabase.auth.signOut() : setOfflineMode(false)}>{session ? "Sair" : "Entrar"}</button>
         </div>
@@ -278,25 +299,23 @@ export default function Home() {
 
       {tab === "questoes" ? (
         <>
-          <section className="hero">
-            <div><span className="eyebrow">PLATAFORMA DE ESTUDOS</span><h1>Estude de forma <em>mais inteligente.</em></h1><p>Filtre, resolva e acompanhe seu desempenho em questões médicas.</p></div>
-            <div className="hero-stats"><div><b>{questions.length}</b><span>questões no banco</span></div><div><b>{stats.correct}</b><span>acertos</span></div><div><b>{stats.answered ? Math.round(stats.correct / stats.answered * 100) : 0}%</b><span>aproveitamento</span></div></div>
-          </section>
-          <section className="workspace">
+          <section className={hasSearched ? "workspace" : "filter-landing"}>
             <aside className="filters">
-              <div className="side-title"><b>Filtros</b><button onClick={() => {setArea("Todas");setTopic("Todos");setDifficulty("Todas");setTag("Todas");setSearch("");}}>Limpar</button></div>
+              <div className="side-title"><b>Encontre suas questões</b><button onClick={clearFilters}>Limpar</button></div>
+              {!hasSearched && <div className="filter-intro"><span className="eyebrow">BANCO MÉDICO</span><h1>O que você quer estudar hoje?</h1><p>Escolha os filtros e carregue somente as questões que deseja resolver.</p></div>}
               <label>Buscar questão<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Digite uma palavra-chave..." /></label>
               <label>Área do conhecimento<select value={area} onChange={e => changeArea(e.target.value)}><option>Todas</option>{Object.keys(topicMap).map(x => <option key={x}>{x}</option>)}</select></label>
               <label>Subtema<select value={topic} onChange={e => setTopic(e.target.value)}><option>Todos</option>{(area === "Todas" ? [...new Set(Object.values(topicMap).flat())] : topicMap[area]).map(x => <option key={x}>{x}</option>)}</select></label>
               <label>Dificuldade<select value={difficulty} onChange={e => setDifficulty(e.target.value)}><option>Todas</option><option>Fácil</option><option>Média</option><option>Difícil</option></select></label>
               <label>Banco de questões<select value={tag} onChange={e => setTag(e.target.value)}><option>Todas</option><option>OMED</option><option>Banco geral</option><option>Importada</option></select></label>
               <div className="result-count"><b>{filtered.length}</b><span>questões encontradas</span></div>
+              <button className="primary filter-submit" onClick={applyFilters}>Buscar questões</button>
             </aside>
-            <section className="question-area">
-              {filtered.length ? filtered.map((q, questionIndex) => {
+            {hasSearched && <section className="question-area">
+              {filtered.length ? visibleQuestions.map((q, questionIndex) => {
                 const response = responses[q.id] || {};
                 return <article className="question-card" key={q.id}>
-                  <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {questionIndex + 1} de {filtered.length}</small></div>
+                  <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
                   <h2>{q.text}</h2>
                   <div className="options">{q.options.map((opt, i) => {
                     let optionState = response.selected === i ? "selected" : "";
@@ -308,7 +327,12 @@ export default function Home() {
                   <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button><button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button></div>
                 </article>;
               }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
-            </section>
+              {filtered.length > pageSize && <div className="pagination">
+                <button className="next" disabled={page === 1} onClick={() => {setPage(p => p - 1);window.scrollTo({top:0,behavior:"smooth"});}}>← Anterior</button>
+                <span>Página <b>{page}</b> de {totalPages}</span>
+                <button className="next" disabled={page === totalPages} onClick={() => {setPage(p => p + 1);window.scrollTo({top:0,behavior:"smooth"});}}>Próxima →</button>
+              </div>}
+            </section>}
           </section>
         </>
       ) : tab === "dashboard" ? (
