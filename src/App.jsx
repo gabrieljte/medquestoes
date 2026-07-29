@@ -201,6 +201,14 @@ export default function Home() {
       .forEach(attempt => latest.set(String(attempt.questionId), attempt));
     return latest;
   }, [attempts]);
+  const attemptCountByQuestion = useMemo(() => {
+    const counts = new Map();
+    attempts.forEach(attempt => {
+      const id = String(attempt.questionId);
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+    return counts;
+  }, [attempts]);
   const answeredIds = useMemo(() => new Set(latestAttemptByQuestion.keys()), [latestAttemptByQuestion]);
   const answeredCount = questions.filter(question => answeredIds.has(String(question.id))).length;
   const studyProgress = questions.length ? Math.round(answeredCount / questions.length * 100) : 0;
@@ -269,6 +277,13 @@ export default function Home() {
   }, [area, topic, difficulty, tag, answerStatus, search]);
 
   function changeArea(value) { setArea(value); setTopic("Todos"); }
+  function retryQuestion(questionId) {
+    setResponses(current => ({
+      ...current,
+      [questionId]: { selected: null, answered: false, retrying: true }
+    }));
+    setNotice("Nova tentativa iniciada. A resposta anterior continuará no histórico.");
+  }
   function clearFilters() {
     setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setAnswerStatus("Não respondidas"); setSearch("");
     setHasSearched(false); setPage(1);
@@ -282,8 +297,10 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function selectOption(questionId, option) {
-    if (responses[questionId]?.answered) return;
-    setResponses(r => ({ ...r, [questionId]: { selected: option, answered: false } }));
+    const localResponse = responses[questionId];
+    if (localResponse?.answered) return;
+    if (latestAttemptByQuestion.has(String(questionId)) && !localResponse?.retrying) return;
+    setResponses(r => ({ ...r, [questionId]: { ...r[questionId], selected: option, answered: false } }));
   }
   async function answer(question) {
     const response = responses[question.id];
@@ -297,7 +314,7 @@ export default function Home() {
       correct: response.selected === question.answer,
       answeredAt: new Date().toISOString()
     };
-    setResponses(r => ({ ...r, [question.id]: { ...response, answered: true } }));
+    setResponses(r => ({ ...r, [question.id]: { ...response, answered: true, retrying: false } }));
     setReviewedQuestionId(String(question.id));
     setAttempts(items => [...items, attempt]);
     setStats(s => ({ answered: s.answered + 1, correct: s.correct + (attempt.correct ? 1 : 0) }));
@@ -403,7 +420,7 @@ export default function Home() {
                 const savedAttempt = latestAttemptByQuestion.get(String(q.id));
                 const response = responses[q.id] || (savedAttempt ? { selected: savedAttempt.selectedAnswer, answered: true } : {});
                 return <article className="question-card" key={q.id}>
-                  <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
+                  <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span>{attemptCountByQuestion.has(String(q.id)) && <span className="attempt-badge">{attemptCountByQuestion.get(String(q.id))}× respondida</span>}<small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
                   <h2>{q.text}</h2>
                   <div className="options">{q.options.map((opt, i) => {
                     let optionState = response.selected === i ? "selected" : "";
@@ -414,7 +431,9 @@ export default function Home() {
                   {response.answered && <div className={`feedback ${response.selected === q.answer ? "good" : "bad"}`}><b>{response.selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
                   <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button>{response.answered && answerStatus === "Não respondidas"
                     ? <button className="primary" onClick={() => setReviewedQuestionId(null)}>Continuar →</button>
-                    : <button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button>}</div>
+                    : response.answered
+                      ? <button className="retry-button" onClick={() => retryQuestion(q.id)}>↻ Responder novamente</button>
+                      : <button className="primary" disabled={response.selected == null} onClick={() => answer(q)}>{response.retrying ? "Confirmar nova resposta" : "Confirmar resposta"}</button>}</div>
                 </article>;
               }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>}
