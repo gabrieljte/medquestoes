@@ -8,6 +8,34 @@ const periods = [
   { value: "all", label: "Todo o período" }
 ];
 
+const STUDY_TIME_ZONE = "America/Cuiaba";
+const datePartsFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: STUDY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+const fullDateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
+  day: "2-digit",
+  month: "long",
+  year: "numeric"
+});
+
+function dateKeyInStudyZone(value) {
+  const parts = Object.fromEntries(
+    datePartsFormatter.formatToParts(new Date(value))
+      .filter(part => part.type !== "literal")
+      .map(part => [part.type, part.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function keyToUtcDate(key) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
 export default function Dashboard({ attempts }) {
   const [period, setPeriod] = useState("30");
   const [area, setArea] = useState("Todas");
@@ -37,31 +65,32 @@ export default function Dashboard({ attempts }) {
 
   const daily = useMemo(() => {
     if (!filtered.length) return [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayKey = dateKeyInStudyZone(new Date());
+    const today = keyToUtcDate(todayKey);
     const configuredDays = period === "all" ? null : Number(period);
-    const firstAttempt = new Date(Math.min(...filtered.map(item => new Date(item.answeredAt).getTime())));
-    firstAttempt.setHours(0, 0, 0, 0);
+    const firstAttemptKey = [...filtered]
+      .map(item => dateKeyInStudyZone(item.answeredAt))
+      .sort()[0];
+    const firstAttempt = keyToUtcDate(firstAttemptKey);
     const start = configuredDays
       ? new Date(today.getTime() - (configuredDays - 1) * 86400000)
       : firstAttempt;
     const grouped = {};
     filtered.forEach(item => {
-      const date = new Date(item.answeredAt);
-      const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      const key = dateKeyInStudyZone(item.answeredAt);
       grouped[key] ||= { total: 0, correct: 0 };
       grouped[key].total += 1;
       if (item.correct) grouped[key].correct += 1;
     });
     const days = [];
-    for (let cursor = new Date(start); cursor <= today; cursor.setDate(cursor.getDate() + 1)) {
+    for (let cursor = new Date(start); cursor <= today; cursor = new Date(cursor.getTime() + 86400000)) {
       const date = new Date(cursor);
-      const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      const key = date.toISOString().slice(0, 10);
       const values = grouped[key] || { total: 0, correct: 0 };
       days.push({
         key,
-        label: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-        fullLabel: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" }),
+        label: `${key.slice(8, 10)}/${key.slice(5, 7)}`,
+        fullLabel: fullDateFormatter.format(date),
         ...values
       });
     }

@@ -122,7 +122,7 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .daily-bar{position:relative;width:20px;min-height:4px;overflow:hidden;border-radius:7px 7px 3px 3px;background:#b9d9d2;transition:height .3s ease}
 .daily-bar>span{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#17a989,#087c70)}
 .daily-bar.empty{background:#eaf0ed}
-.daily-column small{font-size:8px;color:var(--muted);transform:rotate(-38deg);transform-origin:center;white-space:nowrap;align-self:center}
+.daily-column small{font-size:8px;color:var(--muted);white-space:nowrap;align-self:center}
 .daily-legend{display:flex;justify-content:flex-end;gap:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:10px}
 .daily-legend span{display:flex;align-items:center;gap:6px}
 .daily-legend i{width:9px;height:9px;border-radius:3px}
