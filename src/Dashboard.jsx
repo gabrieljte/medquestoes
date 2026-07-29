@@ -68,6 +68,27 @@ export default function Dashboard({ attempts }) {
     return days;
   }, [filtered, period]);
   const dailyMax = Math.max(1, ...daily.map(day => day.total));
+  const lifetimeGame = useMemo(() => {
+    const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
+    let running = 0;
+    let best = 0;
+    let correctTotal = 0;
+    ordered.forEach(item => {
+      if (item.correct) {
+        correctTotal += 1;
+        running += 1;
+        best = Math.max(best, running);
+      } else running = 0;
+    });
+    const xp = correctTotal * 10 + (ordered.length - correctTotal) * 3 + best * 2;
+    return { best, xp, level: Math.floor(xp / 100) + 1, total: ordered.length, correct: correctTotal };
+  }, [attempts]);
+  const achievements = [
+    { icon: "✓", name: "Primeiro acerto", description: "Acerte sua primeira questão", unlocked: lifetimeGame.correct >= 1 },
+    { icon: "🔥", name: "Em chamas", description: "Faça 3 acertos consecutivos", unlocked: lifetimeGame.best >= 3 },
+    { icon: "⚡", name: "Maratonista", description: "Responda 50 questões", unlocked: lifetimeGame.total >= 50 },
+    { icon: "🏆", name: "Imparável", description: "Faça 10 acertos consecutivos", unlocked: lifetimeGame.best >= 10 }
+  ];
 
   return (
     <section className="dashboard-page">
@@ -75,7 +96,10 @@ export default function Dashboard({ attempts }) {
         <div className="dashboard-filters"><label>Período<select value={period} onChange={e => setPeriod(e.target.value)}>{periods.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
           <label>Área<select value={area} onChange={e => setArea(e.target.value)}><option>Todas</option>{areas.map(x => <option key={x}>{x}</option>)}</select></label></div>
       </div>
-      <div className="metric-grid"><div className="metric"><span>Questões respondidas</span><b>{filtered.length}</b></div><div className="metric"><span>Respostas corretas</span><b>{correct}</b></div><div className="metric accent"><span>Aproveitamento</span><b>{rate}%</b></div></div>
+      <div className="metric-grid"><div className="metric"><span>Questões respondidas</span><b>{filtered.length}</b></div><div className="metric"><span>Respostas corretas</span><b>{correct}</b></div><div className="metric"><span>Melhor sequência</span><b>🔥 {lifetimeGame.best}</b></div><div className="metric accent"><span>Aproveitamento</span><b>{rate}%</b></div></div>
+      <div className="achievement-card"><div className="achievement-heading"><div><span className="eyebrow">CONQUISTAS</span><h2>Nível {lifetimeGame.level}</h2><p>{lifetimeGame.xp} XP acumulados</p></div><strong>{achievements.filter(item => item.unlocked).length}/{achievements.length}</strong></div>
+        <div className="achievement-grid">{achievements.map(item => <div className={`achievement ${item.unlocked ? "unlocked" : ""}`} key={item.name}><span>{item.icon}</span><div><b>{item.name}</b><small>{item.description}</small></div>{item.unlocked && <i>Desbloqueada</i>}</div>)}</div>
+      </div>
       <div className="chart-card daily-card"><div className="chart-title"><div><h2>Evolução dia após dia</h2><small>Quantidade respondida e acertos em cada dia</small></div><span>{periods.find(p => p.value === period)?.label}</span></div>
         {daily.length ? <div className="daily-scroll"><div className="daily-chart" style={{ minWidth: `${Math.max(680, daily.length * 42)}px` }}>
           {daily.map(day => {

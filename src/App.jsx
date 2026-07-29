@@ -200,6 +200,32 @@ export default function Home() {
     (!search || q.text.toLowerCase().includes(search.toLowerCase()))
   ), [questions, area, topic, difficulty, tag, search]);
 
+  const gameStats = useMemo(() => {
+    const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
+    let currentStreak = 0;
+    let bestStreak = 0;
+    let running = 0;
+    let correct = 0;
+    ordered.forEach(item => {
+      if (item.correct) {
+        correct += 1;
+        running += 1;
+        bestStreak = Math.max(bestStreak, running);
+      } else {
+        running = 0;
+      }
+    });
+    for (let index = ordered.length - 1; index >= 0 && ordered[index]?.correct; index -= 1) currentStreak += 1;
+    const xp = correct * 10 + (ordered.length - correct) * 3 + bestStreak * 2;
+    const stage = currentStreak >= 12 ? 4 : currentStreak >= 8 ? 3 : currentStreak >= 5 ? 2 : currentStreak >= 3 ? 1 : 0;
+    return {
+      currentStreak, bestStreak, correct, xp,
+      level: Math.floor(xp / 100) + 1,
+      progress: xp % 100,
+      stage
+    };
+  }, [attempts]);
+
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleQuestions = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -253,6 +279,12 @@ export default function Home() {
     setResponses(r => ({ ...r, [question.id]: { ...response, answered: true } }));
     setAttempts(items => [...items, attempt]);
     setStats(s => ({ answered: s.answered + 1, correct: s.correct + (attempt.correct ? 1 : 0) }));
+    const nextStreak = attempt.correct ? gameStats.currentStreak + 1 : 0;
+    if (attempt.correct && [3, 5, 8, 12].includes(nextStreak)) {
+      setNotice(`🔥 Sequência de ${nextStreak} acertos! O fogo está aumentando.`);
+    } else if (!attempt.correct && gameStats.currentStreak >= 3) {
+      setNotice(`A sequência de ${gameStats.currentStreak} terminou. Bora acender o fogo de novo!`);
+    }
     await saveAttempt(attempt);
     if (session?.user?.id) {
       saveCloudAttempt(attempt, session.user.id).catch(() => setNotice("Resposta salva localmente e aguardando sincronização."));
@@ -298,7 +330,7 @@ export default function Home() {
   if (!session && !offlineMode) return <AuthScreen onOffline={() => setOfflineMode(true)} />;
 
   return (
-    <main>
+    <main className={`app-shell heat-${gameStats.stage}`}>
       <header>
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav>
@@ -306,6 +338,10 @@ export default function Home() {
           <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Desempenho</button>
           <button className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}>Adicionar</button>
         </nav>
+        <div className={`game-hud ${gameStats.currentStreak >= 3 ? "on-fire" : ""}`}>
+          <div className="streak-counter"><span>🔥</span><b>{gameStats.currentStreak}</b><small>sequência</small></div>
+          <div className="level-box"><span>Nível {gameStats.level}</span><div><i style={{ width: `${gameStats.progress}%` }} /></div><small>{gameStats.progress}/100 XP</small></div>
+        </div>
         <div className="account-box">
           <span className={`db-status ${databaseReady && !syncError ? "online" : ""}`} title={syncError}>{syncing ? "↻ Sincronizando" : syncError ? `● ${syncError}` : session ? "● Sincronizado" : "● Modo offline"}</span>
           <small>{session?.user?.email || "Neste dispositivo"}</small>
