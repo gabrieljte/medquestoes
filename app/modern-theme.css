@@ -106,7 +106,17 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .chart-title small{display:block;margin-top:5px;color:var(--muted);font-size:10px}
 .daily-scroll{overflow-x:auto;padding:5px 0 10px;scrollbar-width:thin;scrollbar-color:#b8d1ca transparent}
 .daily-chart{height:215px;display:flex;align-items:stretch;gap:8px;padding:8px 4px 0}
-.daily-column{flex:1;min-width:34px;display:grid;grid-template-rows:18px 1fr 25px;text-align:center;align-items:end}
+.daily-column{position:relative;flex:1;min-width:34px;display:grid;grid-template-rows:18px 1fr 25px;text-align:center;align-items:end;padding:0;border:0;background:transparent;color:inherit}
+.daily-column:focus{outline:none}
+.daily-column:focus-visible{border-radius:8px;box-shadow:0 0 0 3px rgba(8,124,112,.16)}
+.daily-tooltip{position:absolute;z-index:8;left:50%;bottom:62px;width:165px;display:grid;gap:4px;padding:11px 12px;border:1px solid rgba(25,61,51,.1);border-radius:12px;background:#18352f;color:#fff;text-align:left;box-shadow:0 14px 35px rgba(15,45,37,.22);opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,8px);transition:opacity .16s ease,transform .16s ease,visibility .16s}
+.daily-tooltip::after{content:"";position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:#18352f;transform:translateX(-50%) rotate(45deg)}
+.daily-tooltip b{font-size:10px;text-transform:capitalize}
+.daily-tooltip span{font-size:9px;color:#d7e5e1}
+.daily-tooltip strong{margin-top:3px;padding-top:6px;border-top:1px solid rgba(255,255,255,.13);font-size:9px;color:#fff}
+.daily-tooltip .tooltip-correct{color:#6ee7b7}
+.daily-tooltip .tooltip-wrong{color:#fda4af}
+.daily-column:hover .daily-tooltip,.daily-column:focus .daily-tooltip{opacity:1;visibility:visible;transform:translate(-50%,0)}
 .daily-value{font-size:9px;font-weight:700;color:var(--teal)}
 .daily-bar-track{height:150px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line)}
 .daily-bar{position:relative;width:20px;min-height:4px;overflow:hidden;border-radius:7px 7px 3px 3px;background:#b9d9d2;transition:height .3s ease}

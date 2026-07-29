@@ -93,11 +93,14 @@ export default function Dashboard({ attempts }) {
           {daily.map(day => {
             const height = day.total ? Math.max(12, day.total / dailyMax * 100) : 3;
             const correctHeight = day.total ? day.correct / day.total * 100 : 0;
-            return <div className="daily-column" key={day.key} title={`${day.fullLabel}: ${day.correct}/${day.total} acertos`}>
+            const errors = day.total - day.correct;
+            const rate = day.total ? Math.round(day.correct / day.total * 100) : 0;
+            return <button className="daily-column" key={day.key} type="button" aria-label={`${day.fullLabel}: ${day.correct} acertos e ${errors} erros`}>
+              <span className="daily-tooltip"><b>{day.fullLabel}</b><span>{day.total} respondidas</span><span className="tooltip-correct">● {day.correct} acertos</span><span className="tooltip-wrong">● {errors} erros</span><strong>{rate}% de aproveitamento</strong></span>
               <div className="daily-value">{day.total || ""}</div>
               <div className="daily-bar-track"><div className={`daily-bar ${day.total ? "" : "empty"}`} style={{ height: `${height}%` }}><span style={{ height: `${correctHeight}%` }} /></div></div>
               <small>{day.label}</small>
-            </div>;
+            </button>;
           })}
         </div></div> : <div className="chart-empty">Responda algumas questões para visualizar sua evolução diária.</div>}
         {daily.length > 0 && <div className="daily-legend"><span><i className="answered-dot" />Respondidas</span><span><i className="correct-dot" />Proporção de acertos</span></div>}
