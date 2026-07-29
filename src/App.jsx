@@ -203,6 +203,18 @@ export default function Home() {
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleQuestions = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageItems = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+    const selected = [...new Set([1, totalPages, page - 1, page, page + 1])]
+      .filter(value => value >= 1 && value <= totalPages)
+      .sort((a, b) => a - b);
+    const items = [];
+    selected.forEach((value, index) => {
+      if (index && value - selected[index - 1] > 1) items.push(`gap-${value}`);
+      items.push(value);
+    });
+    return items;
+  }, [page, totalPages]);
 
   useEffect(() => {
     setHasSearched(false);
@@ -217,6 +229,10 @@ export default function Home() {
   function applyFilters() {
     setPage(1);
     setHasSearched(true);
+  }
+  function goToPage(nextPage) {
+    setPage(nextPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function selectOption(questionId, option) {
     if (responses[questionId]?.answered) return;
@@ -312,6 +328,17 @@ export default function Home() {
               <button className="primary filter-submit" onClick={applyFilters}>Buscar questões</button>
             </aside>
             {hasSearched && <section className="question-area">
+              {filtered.length > pageSize && <div className="question-toolbar">
+                <span><b>{filtered.length}</b> questões · 10 por página</span>
+                <div className="page-squares" aria-label="Paginação">
+                  <button disabled={page === 1} onClick={() => goToPage(page - 1)} aria-label="Página anterior">‹</button>
+                  {pageItems.map(item => typeof item === "number"
+                    ? <button key={item} className={item === page ? "active" : ""} onClick={() => goToPage(item)}>{item}</button>
+                    : <span key={item}>…</span>
+                  )}
+                  <button disabled={page === totalPages} onClick={() => goToPage(page + 1)} aria-label="Próxima página">›</button>
+                </div>
+              </div>}
               {filtered.length ? visibleQuestions.map((q, questionIndex) => {
                 const response = responses[q.id] || {};
                 return <article className="question-card" key={q.id}>
@@ -327,11 +354,6 @@ export default function Home() {
                   <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button><button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button></div>
                 </article>;
               }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
-              {filtered.length > pageSize && <div className="pagination">
-                <button className="next" disabled={page === 1} onClick={() => {setPage(p => p - 1);window.scrollTo({top:0,behavior:"smooth"});}}>← Anterior</button>
-                <span>Página <b>{page}</b> de {totalPages}</span>
-                <button className="next" disabled={page === totalPages} onClick={() => {setPage(p => p + 1);window.scrollTo({top:0,behavior:"smooth"});}}>Próxima →</button>
-              </div>}
             </section>}
           </section>
         </>
