@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadAttempts, loadQuestions, saveAttempt, saveAttempts, saveQuestions } from "./db.js";
+import AuthScreen from "./AuthScreen.jsx";
+import Dashboard from "./Dashboard.jsx";
+import { cloudConfigured, supabase } from "./supabase.js";
+import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
+import { omedQuestions } from "./omedQuestions.js";
 
 const seed = [
   {
@@ -50,7 +56,8 @@ const seed = [
     text: "A vacinação é classificada como qual nível de prevenção?",
     options: ["Primordial", "Primária", "Secundária", "Terciária"],
     answer: 1, explanation: "A vacinação é proteção específica e integra a prevenção primária."
-  }
+  },
+  ...omedQuestions
 ];
 
 const topicMap = {
@@ -58,8 +65,22 @@ const topicMap = {
   "Neurologia": ["Doenças cerebrovasculares", "Epilepsia", "Cefaleias", "Demências"],
   "Oncologia": ["Rastreamento", "Cuidados paliativos", "Tumores sólidos"],
   "Cirurgia Geral": ["Abdome agudo", "Trauma", "Pré e pós-operatório"],
-  "Medicina de Família e Comunidade": ["Prevenção", "Atenção primária", "Saúde coletiva"]
+  "Medicina de Família e Comunidade": ["Prevenção", "Atenção primária", "Saúde coletiva"],
+  "Pneumologia": [],
+  "Pediatria": [],
+  "Infectologia": [],
+  "Ginecologia e Obstetrícia": [],
+  "Psiquiatria": [],
+  "Reumatologia": [],
+  "Endocrinologia": [],
+  "Nefrologia": [],
+  "Hematologia": []
 };
+
+for (const question of omedQuestions) {
+  if (!topicMap[question.area]) topicMap[question.area] = [];
+  if (!topicMap[question.area].includes(question.topic)) topicMap[question.area].push(question.topic);
+}
 
 const letters = ["A", "B", "C", "D", "E"];
 
@@ -88,7 +109,7 @@ function parseQuestions(raw, fallbackArea, fallbackTopic) {
     if (fullExp) explanation = fullExp[1].trim();
     if (text && opts.length >= 2) parsed.push({
       id: Date.now() + parsed.length, area: fallbackArea, topic: fallbackTopic,
-      difficulty: "Média", text, options: opts, answer, explanation: explanation || "Comentário ainda não informado."
+      difficulty: "Média", tag: "Importada", text, options: opts, answer, explanation: explanation || "Comentário ainda não informado."
     });
   }
   return parsed;
@@ -100,49 +121,118 @@ export default function Home() {
   const [area, setArea] = useState("Todas");
   const [topic, setTopic] = useState("Todos");
   const [difficulty, setDifficulty] = useState("Todas");
+  const [tag, setTag] = useState("Todas");
   const [search, setSearch] = useState("");
-  const [current, setCurrent] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const [answered, setAnswered] = useState(false);
+  const [responses, setResponses] = useState({});
   const [stats, setStats] = useState({ answered: 0, correct: 0 });
   const [notice, setNotice] = useState("");
+  const [databaseReady, setDatabaseReady] = useState(false);
+  const [attempts, setAttempts] = useState([]);
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [importArea, setImportArea] = useState("Cardiologia");
   const [importTopic, setImportTopic] = useState("Doença isquêmica");
   const [draft, setDraft] = useState({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
   const fileRef = useRef(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("medquestoes-user");
-    if (saved) setQuestions(q => [...q, ...JSON.parse(saved)]);
+    Promise.all([loadQuestions(seed), loadAttempts()])
+      .then(([saved, savedAttempts]) => {
+        setQuestions(saved);
+        setAttempts(savedAttempts);
+        setStats({ answered: savedAttempts.length, correct: savedAttempts.filter(a => a.correct).length });
+        setDatabaseReady(true);
+      })
+      .catch(() => setNotice("Não foi possível abrir o banco de dados local."));
   }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true);
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthReady(true);
+      if (nextSession) setOfflineMode(false);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id || !databaseReady) return;
+    let active = true;
+    setSyncing(true);
+    Promise.all([
+      syncQuestions(questions, session.user.id),
+      syncAttempts(attempts, session.user.id)
+    ]).then(async ([cloudQuestions, cloudAttempts]) => {
+      if (!active) return;
+      await saveQuestions(cloudQuestions);
+      await saveAttempts(cloudAttempts);
+      setQuestions(cloudQuestions);
+      setAttempts(cloudAttempts);
+      setStats({ answered: cloudAttempts.length, correct: cloudAttempts.filter(a => a.correct).length });
+      setNotice("Sincronização concluída.");
+    }).catch(() => {
+      if (active) setNotice("Sem conexão com a nuvem. Os dados continuam salvos neste dispositivo.");
+    }).finally(() => {
+      if (active) setSyncing(false);
+    });
+    return () => { active = false; };
+  }, [session?.user?.id, databaseReady]);
 
   const filtered = useMemo(() => questions.filter(q =>
     (area === "Todas" || q.area === area) &&
     (topic === "Todos" || q.topic === topic) &&
     (difficulty === "Todas" || q.difficulty === difficulty) &&
+    (tag === "Todas" || (q.tag || "Banco geral") === tag) &&
     (!search || q.text.toLowerCase().includes(search.toLowerCase()))
-  ), [questions, area, topic, difficulty, search]);
+  ), [questions, area, topic, difficulty, tag, search]);
 
-  const q = filtered[Math.min(current, Math.max(0, filtered.length - 1))];
-
-  function resetQuestion() { setSelected(null); setAnswered(false); }
-  function changeArea(value) { setArea(value); setTopic("Todos"); setCurrent(0); resetQuestion(); }
-  function answer() {
-    if (selected === null || answered) return;
-    setAnswered(true);
-    setStats(s => ({ answered: s.answered + 1, correct: s.correct + (selected === q.answer ? 1 : 0) }));
+  function changeArea(value) { setArea(value); setTopic("Todos"); }
+  function selectOption(questionId, option) {
+    if (responses[questionId]?.answered) return;
+    setResponses(r => ({ ...r, [questionId]: { selected: option, answered: false } }));
   }
-  function next() { setCurrent(i => filtered.length ? (i + 1) % filtered.length : 0); resetQuestion(); }
-  function persist(items) {
-    const userItems = [...questions.filter(x => x.id > 100000), ...items];
-    localStorage.setItem("medquestoes-user", JSON.stringify(userItems));
+  async function answer(question) {
+    const response = responses[question.id];
+    if (response?.selected == null || response.answered) return;
+    const attempt = {
+      id: crypto.randomUUID(),
+      questionId: String(question.id),
+      area: question.area,
+      topic: question.topic,
+      selectedAnswer: response.selected,
+      correct: response.selected === question.answer,
+      answeredAt: new Date().toISOString()
+    };
+    setResponses(r => ({ ...r, [question.id]: { ...response, answered: true } }));
+    setAttempts(items => [...items, attempt]);
+    setStats(s => ({ answered: s.answered + 1, correct: s.correct + (attempt.correct ? 1 : 0) }));
+    await saveAttempt(attempt);
+    if (session?.user?.id) {
+      saveCloudAttempt(attempt, session.user.id).catch(() => setNotice("Resposta salva localmente e aguardando sincronização."));
+    }
+  }
+  async function persist(items) {
+    await saveQuestions(items);
     setQuestions(qs => [...qs, ...items]);
+    if (session?.user?.id) {
+      saveCloudQuestions(items, session.user.id).catch(() => setNotice("Questões salvas localmente e aguardando sincronização."));
+    }
   }
-  function addManual(e) {
+  async function addManual(e) {
     e.preventDefault();
     const item = { id: Date.now(), area: importArea, topic: importTopic, difficulty: "Média", text: draft.text,
       options: [draft.a, draft.b, draft.c, draft.d], answer: letters.indexOf(draft.answer), explanation: draft.explanation || "Sem comentário." };
-    persist([item]); setDraft({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
+    await persist([item]); setDraft({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
     setNotice("Questão adicionada ao banco com sucesso.");
   }
   async function importFile(file) {
@@ -161,11 +251,14 @@ export default function Home() {
       } else raw = await file.text();
       const items = parseQuestions(raw, importArea, importTopic);
       if (!items.length) throw new Error("Nenhuma questão reconhecida");
-      persist(items); setNotice(`${items.length} questão(ões) importada(s) com sucesso.`);
+      await persist(items); setNotice(`${items.length} questão(ões) importada(s) com sucesso.`);
     } catch (err) {
       setNotice("Não foi possível reconhecer questões automaticamente. Confira o formato do arquivo.");
     }
   }
+
+  if (!authReady) return <main className="loading-page">Abrindo MedQuestões...</main>;
+  if (!session && !offlineMode) return <AuthScreen onOffline={() => setOfflineMode(true)} />;
 
   return (
     <main>
@@ -173,9 +266,14 @@ export default function Home() {
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav>
           <button className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}>Questões</button>
+          <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>Desempenho</button>
           <button className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}>Adicionar</button>
         </nav>
-        <div className="avatar">AM</div>
+        <div className="account-box">
+          <span className={`db-status ${databaseReady ? "online" : ""}`}>{syncing ? "↻ Sincronizando" : session ? "● Sincronizado" : "● Modo offline"}</span>
+          <small>{session?.user?.email || "Neste dispositivo"}</small>
+          <button onClick={() => session ? supabase.auth.signOut() : setOfflineMode(false)}>{session ? "Sair" : "Entrar"}</button>
+        </div>
       </header>
 
       {tab === "questoes" ? (
@@ -186,29 +284,35 @@ export default function Home() {
           </section>
           <section className="workspace">
             <aside className="filters">
-              <div className="side-title"><b>Filtros</b><button onClick={() => {setArea("Todas");setTopic("Todos");setDifficulty("Todas");setSearch("");}}>Limpar</button></div>
-              <label>Buscar questão<input value={search} onChange={e => {setSearch(e.target.value);setCurrent(0);}} placeholder="Digite uma palavra-chave..." /></label>
+              <div className="side-title"><b>Filtros</b><button onClick={() => {setArea("Todas");setTopic("Todos");setDifficulty("Todas");setTag("Todas");setSearch("");}}>Limpar</button></div>
+              <label>Buscar questão<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Digite uma palavra-chave..." /></label>
               <label>Área do conhecimento<select value={area} onChange={e => changeArea(e.target.value)}><option>Todas</option>{Object.keys(topicMap).map(x => <option key={x}>{x}</option>)}</select></label>
-              <label>Subtema<select value={topic} onChange={e => {setTopic(e.target.value);setCurrent(0);resetQuestion();}}><option>Todos</option>{(area === "Todas" ? [...new Set(Object.values(topicMap).flat())] : topicMap[area]).map(x => <option key={x}>{x}</option>)}</select></label>
+              <label>Subtema<select value={topic} onChange={e => setTopic(e.target.value)}><option>Todos</option>{(area === "Todas" ? [...new Set(Object.values(topicMap).flat())] : topicMap[area]).map(x => <option key={x}>{x}</option>)}</select></label>
               <label>Dificuldade<select value={difficulty} onChange={e => setDifficulty(e.target.value)}><option>Todas</option><option>Fácil</option><option>Média</option><option>Difícil</option></select></label>
+              <label>Banco de questões<select value={tag} onChange={e => setTag(e.target.value)}><option>Todas</option><option>OMED</option><option>Banco geral</option><option>Importada</option></select></label>
               <div className="result-count"><b>{filtered.length}</b><span>questões encontradas</span></div>
             </aside>
             <section className="question-area">
-              {q ? <article className="question-card">
-                <div className="question-meta"><span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {current + 1} de {filtered.length}</small></div>
-                <h2>{q.text}</h2>
-                <div className="options">{q.options.map((opt, i) => {
-                  let state = selected === i ? "selected" : "";
-                  if (answered && i === q.answer) state = "correct";
-                  if (answered && selected === i && i !== q.answer) state = "wrong";
-                  return <button key={i} className={state} onClick={() => !answered && setSelected(i)}><b>{letters[i]}</b><span>{opt}</span>{answered && i === q.answer && <i>✓</i>}</button>;
-                })}</div>
-                {answered && <div className={`feedback ${selected === q.answer ? "good" : "bad"}`}><b>{selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
-                <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button><div><button className="next" onClick={next}>Pular</button><button className="primary" disabled={selected === null} onClick={answered ? next : answer}>{answered ? "Próxima questão →" : "Confirmar resposta"}</button></div></div>
-              </article> : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
+              {filtered.length ? filtered.map((q, questionIndex) => {
+                const response = responses[q.id] || {};
+                return <article className="question-card" key={q.id}>
+                  <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span><small>Questão {questionIndex + 1} de {filtered.length}</small></div>
+                  <h2>{q.text}</h2>
+                  <div className="options">{q.options.map((opt, i) => {
+                    let optionState = response.selected === i ? "selected" : "";
+                    if (response.answered && i === q.answer) optionState = "correct";
+                    if (response.answered && response.selected === i && i !== q.answer) optionState = "wrong";
+                    return <button key={i} className={optionState} onClick={() => selectOption(q.id, i)}><b>{letters[i]}</b><span>{opt}</span>{response.answered && i === q.answer && <i>✓</i>}</button>;
+                  })}</div>
+                  {response.answered && <div className={`feedback ${response.selected === q.answer ? "good" : "bad"}`}><b>{response.selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
+                  <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button><button className="primary" disabled={response.selected == null || response.answered} onClick={() => answer(q)}>{response.answered ? "Respondida" : "Confirmar resposta"}</button></div>
+                </article>;
+              }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>
           </section>
         </>
+      ) : tab === "dashboard" ? (
+        <Dashboard attempts={attempts} />
       ) : (
         <section className="add-page">
           <div className="page-heading"><span className="eyebrow">EXPANDA SEU BANCO</span><h1>Adicionar questões</h1><p>Cadastre manualmente ou importe um arquivo com várias questões.</p></div>
@@ -237,7 +341,7 @@ export default function Home() {
           </div>
         </section>
       )}
-      {notice && tab === "questoes" && <div className="toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
+      {notice && <div className="toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       <footer>MedQuestões • Ferramenta de apoio aos estudos — conteúdo não substitui orientação clínica.</footer>
     </main>
   );
