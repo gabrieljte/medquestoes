@@ -32,8 +32,16 @@ function fromCloudQuestion(row) {
 export async function syncQuestions(questions, userId) {
   if (!supabase || !userId) return questions;
 
-  if (questions.length) {
-    const rows = questions.map(q => toCloudQuestion(q, userId));
+  const cleanQuestions = questions.filter(question => !/^omed-.+-r\d+$/.test(String(question.id)));
+  const { error: cleanupError } = await supabase
+    .from("questions")
+    .delete()
+    .eq("user_id", userId)
+    .like("id", "omed-%-r%");
+  if (cleanupError) throw cleanupError;
+
+  if (cleanQuestions.length) {
+    const rows = cleanQuestions.map(q => toCloudQuestion(q, userId));
     for (let index = 0; index < rows.length; index += 50) {
       const { error } = await supabase
         .from("questions")
@@ -47,7 +55,9 @@ export async function syncQuestions(questions, userId) {
     .select("*")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data.map(fromCloudQuestion);
+  return data
+    .map(fromCloudQuestion)
+    .filter(question => !/^omed-.+-r\d+$/.test(String(question.id)));
 }
 
 export async function saveCloudQuestions(questions, userId) {

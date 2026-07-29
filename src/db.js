@@ -53,10 +53,16 @@ export async function loadQuestions(seedQuestions) {
   db.close();
 
   if (stored.length) {
+    const cleanStored = stored.filter(question => !/^omed-.+-r\d+$/.test(String(question.id)));
     const merged = [...new Map(
-      [...stored, ...seedQuestions].map(question => [String(question.id), question])
+      [...cleanStored, ...seedQuestions].map(question => [String(question.id), question])
     ).values()];
-    if (merged.length !== stored.length) await saveQuestions(merged);
+    if (cleanStored.length !== stored.length) {
+      await clearQuestionDatabase();
+      await saveQuestions(merged);
+    } else if (merged.length !== stored.length) {
+      await saveQuestions(merged);
+    }
     return merged;
   }
 

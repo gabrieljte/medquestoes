@@ -202,23 +202,6 @@ const coreOmedQuestions = [
   }
 ];
 
-const openings = [
-  "",
-  "Em uma estação clínica no padrão OMED, ",
-  "Durante uma revisão de alto rendimento, ",
-  "Em um simulado do ciclo clínico, "
-];
-
-function rotateOptions(question, amount) {
-  const size = question.options.length;
-  const shift = amount % size;
-  if (!shift) return { options: question.options, answer: question.answer };
-  return {
-    options: [...question.options.slice(shift), ...question.options.slice(0, shift)],
-    answer: (question.answer - shift + size) % size
-  };
-}
-
 const evidenceByArea = {
   "Cardiologia": "edital OMED Ciclo Clínico; diretrizes cardiovasculares vigentes",
   "Pneumologia": "edital OMED; GINA 2025; GOLD 2026",
@@ -242,29 +225,17 @@ function addEvidence(question) {
   };
 }
 
-function buildOmedBank(baseQuestions, target) {
-  const result = [];
-  let round = 0;
-  while (result.length < target) {
-    for (const question of baseQuestions) {
-      if (result.length >= target) break;
-      const rotated = rotateOptions(question, round);
-      const opening = openings[round % openings.length];
-      result.push({
-        ...question,
-        id: round === 0 ? question.id : `${question.id}-r${round + 1}`,
-        text: opening ? `${opening}${question.text.charAt(0).toLowerCase()}${question.text.slice(1)}` : question.text,
-        options: rotated.options,
-        answer: rotated.answer,
-        variant: round + 1
-      });
-    }
-    round += 1;
-  }
-  return result;
+function normalizeQuestionText(text) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-export const omedQuestions = buildOmedBank(
-  [...coreOmedQuestions, ...omedSupplemental, ...omedClinicalQuestions].map(addEvidence),
-  800
-);
+export const omedQuestions = [...new Map(
+  [...coreOmedQuestions, ...omedSupplemental, ...omedClinicalQuestions]
+    .map(addEvidence)
+    .map(question => [normalizeQuestionText(question.text), question])
+).values()];
