@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 const SAVED_LISTS_KEY = "medquestoes-saved-lists";
+const SAVED_SIMULATIONS_KEY = "medquestoes-saved-simulations";
 const statusOptions = [
   { value: "all", label: "Todas as questões" },
   { value: "unanswered", label: "Somente não respondidas" },
@@ -25,20 +26,24 @@ function shuffled(items) {
   return result;
 }
 
-function loadSavedLists() {
-  try { return JSON.parse(localStorage.getItem(SAVED_LISTS_KEY) || "[]"); }
+function loadSavedLists(storageKey) {
+  try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); }
   catch { return []; }
 }
 
-export default function ListBuilder({ questions, latestAttemptByQuestion, onGenerate }) {
-  const [name, setName] = useState("Minha lista");
+export default function ListBuilder({ questions, latestAttemptByQuestion, onGenerate, mode = "lista" }) {
+  const isSimulation = mode === "simulado";
+  const storageKey = isSimulation ? SAVED_SIMULATIONS_KEY : SAVED_LISTS_KEY;
+  const [name, setName] = useState(isSimulation ? "Meu simulado" : "Minha lista");
   const [status, setStatus] = useState("unanswered");
+  const [feedbackMode, setFeedbackMode] = useState("immediate");
+  const [durationMinutes, setDurationMinutes] = useState(60);
   const [selectedAreas, setSelectedAreas] = useState([]);
   const [collapsedAreas, setCollapsedAreas] = useState(() => new Set());
   const [quantities, setQuantities] = useState({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState("");
-  const [savedLists, setSavedLists] = useState(loadSavedLists);
+  const [savedLists, setSavedLists] = useState(() => loadSavedLists(storageKey));
   const [error, setError] = useState("");
 
   const catalog = useMemo(() => {
@@ -85,7 +90,7 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
 
   function persistLists(next) {
     setSavedLists(next);
-    localStorage.setItem(SAVED_LISTS_KEY, JSON.stringify(next));
+    localStorage.setItem(storageKey, JSON.stringify(next));
   }
 
   function addArea(area, topic) {
@@ -173,8 +178,11 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
     }
     const list = {
       id: crypto.randomUUID(),
-      name: name.trim() || "Minha lista",
+      name: name.trim() || (isSimulation ? "Meu simulado" : "Minha lista"),
+      kind: isSimulation ? "simulado" : "lista",
       status,
+      feedbackMode: isSimulation ? "end" : feedbackMode,
+      durationMinutes: isSimulation ? Math.max(5, Math.min(300, Number(durationMinutes) || 60)) : null,
       ids: shuffled(selected).map(question => String(question.id)),
       breakdown,
       createdAt: new Date().toISOString()
@@ -191,30 +199,38 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
   return (
     <section className="list-builder-page">
       <div className="list-builder-heading">
-        <span className="eyebrow">SIMULADO PERSONALIZADO</span>
-        <h1>Crie sua lista de questões</h1>
-        <p>Pesquise especialidades, escolha os subtemas e defina a quantidade de cada um.</p>
+        <span className="eyebrow">{isSimulation ? "PROVA CRONOMETRADA" : "ESTUDO PERSONALIZADO"}</span>
+        <h1>{isSimulation ? "Crie seu simulado" : "Crie sua lista de questões"}</h1>
+        <p>{isSimulation ? "Monte a prova, defina o tempo e veja o gabarito somente depois de finalizar." : "Pesquise especialidades, escolha os subtemas e defina a quantidade de cada um."}</p>
       </div>
 
       <div className="list-builder-layout has-created-lists">
         <aside className="created-lists">
-          <div className="created-lists-head"><span className="eyebrow">SUAS LISTAS</span><h2>Listas criadas</h2></div>
+          <div className="created-lists-head"><span className="eyebrow">{isSimulation ? "SEUS SIMULADOS" : "SUAS LISTAS"}</span><h2>{isSimulation ? "Simulados criados" : "Listas criadas"}</h2></div>
           <div className="created-lists-body">
             {savedLists.length ? savedLists.map(list => (
               <button type="button" className="saved-list-card" key={list.id} onClick={() => onGenerate(list)}>
                 <span><b>{list.name}</b><small>{list.ids.length} questões · {new Date(list.createdAt).toLocaleDateString("pt-BR")}</small></span>
                 <i onClick={event => deleteList(event, list.id)} aria-label={`Excluir ${list.name}`}>×</i>
               </button>
-            )) : <div className="created-lists-empty"><span>☷</span><p>As listas que você criar aparecerão aqui.</p></div>}
+            )) : <div className="created-lists-empty"><span>{isSimulation ? "⏱️" : "☷"}</span><p>{isSimulation ? "Os simulados que você criar aparecerão aqui." : "As listas que você criar aparecerão aqui."}</p></div>}
           </div>
         </aside>
 
         <div className="list-catalog">
           <div className="list-config">
-            <label>Nome da lista<input value={name} onChange={event => setName(event.target.value)} /></label>
+            <label>{isSimulation ? "Nome do simulado" : "Nome da lista"}<input value={name} onChange={event => setName(event.target.value)} /></label>
             <label>Histórico<select value={status} onChange={event => { setStatus(event.target.value); setQuantities({}); }}>
               {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select></label>
+            {isSimulation ? <label>Tempo de prova
+              <span className="duration-input"><input type="number" min="5" max="300" value={durationMinutes} onChange={event => setDurationMinutes(event.target.value)} /><small>minutos</small></span>
+            </label> : <label>Mostrar gabarito
+              <select value={feedbackMode} onChange={event => setFeedbackMode(event.target.value)}>
+                <option value="immediate">Após cada questão</option>
+                <option value="end">Somente ao terminar a lista</option>
+              </select>
+            </label>}
           </div>
 
           <div className="specialty-picker-wrap">
@@ -286,7 +302,7 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
         </div>
 
         <aside className="list-summary">
-          <span className="eyebrow">RESUMO DA LISTA</span>
+          <span className="eyebrow">{isSimulation ? "RESUMO DO SIMULADO" : "RESUMO DA LISTA"}</span>
           <h2>{name.trim() || "Minha lista"}</h2>
           <strong>{totalRequested}</strong><p>questões selecionadas</p>
           <div className="list-summary-check">
@@ -303,8 +319,9 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
             }) : <small>Adicione especialidades e selecione os subtemas para montar a lista.</small>}
           </div>
           <div className="list-summary-filter"><span>Filtro</span><b>{statusOptions.find(option => option.value === status)?.label}</b></div>
+          <div className="list-summary-filter"><span>{isSimulation ? "Cronômetro" : "Gabarito"}</span><b>{isSimulation ? `${durationMinutes} minutos` : feedbackMode === "immediate" ? "Após cada questão" : "Ao terminar a lista"}</b></div>
           {error && <div className="list-error">{error}</div>}
-          <button type="button" className="primary list-generate" onClick={generate}>Gerar e salvar lista</button>
+          <button type="button" className="primary list-generate" onClick={generate}>{isSimulation ? "Iniciar e salvar simulado" : "Gerar e salvar lista"}</button>
         </aside>
       </div>
     </section>

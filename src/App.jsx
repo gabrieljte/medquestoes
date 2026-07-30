@@ -131,6 +131,8 @@ export default function Home() {
     try { return JSON.parse(localStorage.getItem("medquestoes-active-list") || "null"); }
     catch { return null; }
   });
+  const [listExitOpen, setListExitOpen] = useState(false);
+  const [simulationNow, setSimulationNow] = useState(Date.now());
   const [reviewedQuestionId, setReviewedQuestionId] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [page, setPage] = useState(1);
@@ -148,6 +150,11 @@ export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     localStorage.getItem("medquestoes-sidebar-collapsed") === "true"
   );
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("medquestoes-theme");
+    if (savedTheme === "dark" || savedTheme === "light") return savedTheme;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
   const [importArea, setImportArea] = useState("Cardiologia");
   const [importTopic, setImportTopic] = useState("Doença isquêmica");
   const [draft, setDraft] = useState({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
@@ -163,6 +170,11 @@ export default function Home() {
       })
       .catch(() => setNotice("Não foi possível abrir o banco de dados local."));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("medquestoes-theme", theme);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     if (!supabase) {
@@ -293,6 +305,7 @@ export default function Home() {
       answered,
       correct,
       wrong,
+      unanswered: Math.max(0, total - answered),
       bestStreak,
       percentage: answered ? Math.round((correct / answered) * 100) : 0,
       progress: total ? Math.min(100, Math.round((answered / total) * 100)) : 0,
@@ -300,6 +313,21 @@ export default function Home() {
       breakdown: [...breakdownMap.values()]
     };
   }, [activeList, activeListAttemptByQuestion]);
+
+  const isSimulation = activeList?.kind === "simulado";
+  const simulationSecondsLeft = isSimulation && activeList?.endsAt
+    ? Math.max(0, Math.ceil((new Date(activeList.endsAt).getTime() - simulationNow) / 1000))
+    : 0;
+  const sessionFinished = Boolean(
+    activeList && (activeListStats.completed || (isSimulation && simulationSecondsLeft <= 0))
+  );
+  const simulationClock = `${String(Math.floor(simulationSecondsLeft / 60)).padStart(2, "0")}:${String(simulationSecondsLeft % 60).padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (!isSimulation || sessionFinished) return undefined;
+    const timer = window.setInterval(() => setSimulationNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isSimulation, sessionFinished, activeList?.endsAt]);
 
   const gameStats = useMemo(() => {
     const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
@@ -376,7 +404,16 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function startCustomList(list) {
-    const sessionList = { ...list, startedAt: new Date().toISOString() };
+    const now = Date.now();
+    const sessionList = {
+      ...list,
+      startedAt: new Date(now).toISOString(),
+      endsAt: list.kind === "simulado"
+        ? new Date(now + Math.max(5, Number(list.durationMinutes) || 60) * 60000).toISOString()
+        : null
+    };
+    setListExitOpen(false);
+    setSimulationNow(now);
     setActiveList(sessionList);
     localStorage.setItem("medquestoes-active-list", JSON.stringify(sessionList));
     setResponses(current => {
@@ -393,21 +430,33 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function closeCustomList() {
+    const destination = activeList?.kind === "simulado" ? "simulados" : "listas";
+    setListExitOpen(false);
     setActiveList(null);
     localStorage.removeItem("medquestoes-active-list");
     setHasSearched(false);
     setPage(1);
-    setTab("listas");
+    setTab(destination);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function confirmPauseCustomList() {
-    const confirmed = window.confirm(
-      `Pausar a lista “${activeList?.name || "atual"}” e voltar ao menu de listas?\n\nSeu progresso continuará salvo e você poderá retomar depois.`
-    );
-    if (!confirmed) return;
-    setTab("listas");
-    setNotice(`Lista “${activeList.name}” pausada. Seu progresso foi mantido.`);
+    setListExitOpen(true);
+  }
+  function pauseCustomList() {
+    const destination = activeList?.kind === "simulado" ? "simulados" : "listas";
+    setListExitOpen(false);
+    setTab(destination);
+    setNotice(`${activeList.kind === "simulado" ? "Simulado" : "Lista"} “${activeList.name}” pausado${activeList.kind === "simulado" ? "" : "a"}. Seu progresso foi mantido.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function finishSimulation() {
+    if (!isSimulation) return;
+    const finished = { ...activeList, endsAt: new Date().toISOString() };
+    setActiveList(finished);
+    localStorage.setItem("medquestoes-active-list", JSON.stringify(finished));
+    setSimulationNow(Date.now() + 1000);
+    setListExitOpen(false);
+    setNotice("Simulado finalizado. O gabarito e o resumo já estão disponíveis.");
   }
   function toggleSidebar() {
     setSidebarCollapsed(current => {
@@ -417,6 +466,7 @@ export default function Home() {
     });
   }
   function selectOption(questionId, option) {
+    if (sessionFinished) return;
     const localResponse = responses[questionId];
     if (localResponse?.answered) return;
     if (
@@ -427,6 +477,7 @@ export default function Home() {
     setResponses(r => ({ ...r, [questionId]: { ...r[questionId], selected: option, answered: false } }));
   }
   async function answer(question) {
+    if (sessionFinished) return;
     const response = responses[question.id];
     if (response?.selected == null || response.answered) return;
     const attempt = {
@@ -493,7 +544,7 @@ export default function Home() {
   if (!session && !offlineMode) return <AuthScreen onOffline={() => setOfflineMode(true)} />;
 
   return (
-    <main className={`app-shell heat-${gameStats.stage} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <main className={`app-shell theme-${theme} heat-${gameStats.stage} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="nav-sidebar">
         <button className="sidebar-toggle" type="button" onClick={toggleSidebar}
           aria-label={sidebarCollapsed ? "Abrir menu lateral" : "Fechar menu lateral"}
@@ -504,12 +555,23 @@ export default function Home() {
         <nav aria-label="Navegação principal">
           <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>📝</span><b>Questões</b></button>
           <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>📋</span><b>Listas</b></button>
+          <button title="Simulados" className={tab === "simulados" ? "active" : ""} onClick={() => setTab("simulados")}><span>⏱️</span><b>Simulados</b></button>
           <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>📚</span><b>Biblioteca</b></button>
           <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>🩺</span><b>Casos clínicos</b></button>
           <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>📅</span><b>Calendário</b></button>
           <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>📊</span><b>Desempenho</b></button>
           <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>➕</span><b>Adicionar</b></button>
         </nav>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={() => setTheme(current => current === "light" ? "dark" : "light")}
+          aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
+          title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
+        >
+          <span>{theme === "light" ? "☀️" : "🌙"}</span>
+          <b>{theme === "light" ? "Tema claro" : "Tema escuro"}</b>
+        </button>
         <div className="sidebar-bottom">
           <div className={`game-hud ${gameStats.currentStreak >= 3 ? "on-fire" : ""}`}>
             <div className="streak-counter"><span>🔥</span><b>{gameStats.currentStreak}</b><small>sequência</small></div>
@@ -542,7 +604,8 @@ export default function Home() {
             </aside>}
             {hasSearched && <section className={`question-area ${activeList ? "question-area--active-list" : ""}`}>
               {activeList && <div className="active-list-banner">
-                <div><span>LISTA ATIVA</span><b>{activeList.name}</b><small>{activeListStats.answered} de {activeListStats.total} respondidas · {activeListStats.progress}% concluído</small></div>
+                <div><span>{isSimulation ? "SIMULADO" : "LISTA ATIVA"}</span><b>{activeList.name}</b><small>{activeListStats.answered} de {activeListStats.total} respondidas · {activeListStats.progress}% concluído</small></div>
+                {isSimulation && <div className={`simulation-timer ${simulationSecondsLeft <= 300 ? "ending" : ""}`}><span>⏱️</span><div><small>Tempo restante</small><b>{simulationClock}</b></div></div>}
                 <div className="active-list-progress" aria-hidden="true"><i style={{ width: `${activeListStats.progress}%` }} /></div>
               </div>}
               {(filtered.length > pageSize || activeList) && <div className="question-toolbar">
@@ -563,31 +626,40 @@ export default function Home() {
                   ? activeListAttemptByQuestion.get(String(q.id))
                   : latestAttemptByQuestion.get(String(q.id));
                 const response = responses[q.id] || (savedAttempt ? { selected: savedAttempt.selectedAnswer, answered: true } : {});
+                const revealAnswer = Boolean(
+                  (response.answered && (!activeList || activeList.feedbackMode !== "end" || sessionFinished)) ||
+                  (isSimulation && sessionFinished)
+                );
                 return <article className="question-card" key={q.id}>
                   <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span>{attemptCountByQuestion.has(String(q.id)) && <span className="attempt-badge">{attemptCountByQuestion.get(String(q.id))}× respondida</span>}<small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
                   <h2>{q.text}</h2>
                   <div className="options">{q.options.map((opt, i) => {
                     let optionState = response.selected === i ? "selected" : "";
-                    if (response.answered && i === q.answer) optionState = "correct";
-                    if (response.answered && response.selected === i && i !== q.answer) optionState = "wrong";
-                    return <button key={i} className={optionState} onClick={() => selectOption(q.id, i)}><b>{letters[i]}</b><span>{opt}</span>{response.answered && i === q.answer && <i>✓</i>}</button>;
+                    if (revealAnswer && i === q.answer) optionState = "correct";
+                    if (revealAnswer && response.selected === i && i !== q.answer) optionState = "wrong";
+                    return <button key={i} className={optionState} onClick={() => selectOption(q.id, i)}><b>{letters[i]}</b><span>{opt}</span>{revealAnswer && i === q.answer && <i>✓</i>}</button>;
                   })}</div>
-                  {response.answered && <div className={`feedback ${response.selected === q.answer ? "good" : "bad"}`}><b>{response.selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
-                  <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button>{response.answered && answerStatus === "Não respondidas"
+                  {revealAnswer && <div className={`feedback ${response.answered && response.selected === q.answer ? "good" : "bad"}`}><b>{!response.answered ? `Não respondida. Alternativa ${letters[q.answer]}.` : response.selected === q.answer ? "Resposta correta!" : `Resposta incorreta. Alternativa ${letters[q.answer]}.`}</b><p>{q.explanation}</p></div>}
+                  <div className="actions"><button className="ghost" onClick={() => setNotice("Questão sinalizada para revisão.")}>⚑ Marcar para revisar</button>{activeList && sessionFinished && !response.answered
+                    ? <span className="answer-recorded">⏱️ Não respondida</span>
+                    : activeList && response.answered
+                    ? <span className="answer-recorded">{revealAnswer ? "✓ Resposta corrigida" : "🔒 Resposta registrada"}</span>
+                    : response.answered && answerStatus === "Não respondidas"
                     ? <button className="primary" onClick={() => setReviewedQuestionId(null)}>Continuar →</button>
                     : response.answered
                       ? <button className="retry-button" onClick={() => retryQuestion(q.id)}>↻ Responder novamente</button>
                       : <button className="primary" disabled={response.selected == null} onClick={() => answer(q)}>{response.retrying ? "Confirmar nova resposta" : "Confirmar resposta"}</button>}</div>
                 </article>;
               })}
-                {activeList && activeListStats.completed && page === totalPages && <section className="list-performance-summary">
+                {activeList && sessionFinished && (page === totalPages || isSimulation) && <section className="list-performance-summary">
                   <div className="list-performance-heading">
                     <span>🏁</span>
-                    <div><small>LISTA CONCLUÍDA</small><h2>Resumo do seu desempenho</h2><p>{activeList.name}</p></div>
+                    <div><small>{isSimulation ? "SIMULADO FINALIZADO" : "LISTA CONCLUÍDA"}</small><h2>Resumo do seu desempenho</h2><p>{activeList.name}</p></div>
                   </div>
                   <div className="list-performance-metrics">
                     <div><span>Acertos</span><b>{activeListStats.correct}</b><small>de {activeListStats.total}</small></div>
                     <div><span>Erros</span><b>{activeListStats.wrong}</b><small>questões</small></div>
+                    {isSimulation && <div><span>Em branco</span><b>{activeListStats.unanswered}</b><small>questões</small></div>}
                     <div className="accent"><span>Aproveitamento</span><b>{activeListStats.percentage}%</b><small>{activeListStats.percentage >= 70 ? "Ótimo resultado" : "Continue revisando"}</small></div>
                     <div><span>Melhor sequência</span><b>🔥 {activeListStats.bestStreak}</b><small>acertos seguidos</small></div>
                   </div>
@@ -601,14 +673,16 @@ export default function Home() {
                       </div>;
                     })}
                   </div>
-                  <button type="button" className="primary list-performance-finish" onClick={closeCustomList}>Encerrar e voltar às listas</button>
+                  <button type="button" className="primary list-performance-finish" onClick={closeCustomList}>{isSimulation ? "Encerrar e voltar aos simulados" : "Encerrar e voltar às listas"}</button>
                 </section>}
               </> : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>}
           </section>
         </>
       ) : tab === "listas" ? (
-        <ListBuilder questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
+        <ListBuilder key="listas" mode="lista" questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
+      ) : tab === "simulados" ? (
+        <ListBuilder key="simulados" mode="simulado" questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
       ) : tab === "biblioteca" ? (
         <Library areas={Object.keys(topicMap)} />
       ) : tab === "casos" ? (
@@ -647,6 +721,30 @@ export default function Home() {
       )}
       <footer>MedQuestões • Ferramenta de apoio aos estudos — conteúdo não substitui orientação clínica.</footer>
       </div>
+      {listExitOpen && activeList && <div className="list-exit-modal" role="presentation" onMouseDown={() => setListExitOpen(false)}>
+        <section
+          className="list-exit-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="list-exit-title"
+          onMouseDown={event => event.stopPropagation()}
+        >
+          <button type="button" className="list-exit-dialog__close" onClick={() => setListExitOpen(false)} aria-label="Fechar confirmação">×</button>
+          <span className="list-exit-dialog__icon" aria-hidden="true">{isSimulation ? "⏱️" : "⏸️"}</span>
+          <small>{isSimulation ? "SIMULADO EM ANDAMENTO" : "LISTA EM ANDAMENTO"}</small>
+          <h2 id="list-exit-title">Deseja pausar {isSimulation ? "o simulado" : "esta lista"}?</h2>
+          <p>Você voltará ao menu, mas todas as respostas e o progresso de <b>{activeList.name}</b> continuarão salvos.{isSimulation && " O cronômetro continuará correndo."}</p>
+          <div className="list-exit-dialog__progress">
+            <div><span>Seu progresso</span><b>{activeListStats.answered} de {activeListStats.total} respondidas</b></div>
+            <span><i style={{ width: `${activeListStats.progress}%` }} /></span>
+          </div>
+          <div className="list-exit-dialog__actions">
+            <button type="button" className="list-exit-continue" onClick={() => setListExitOpen(false)}>Continuar respondendo</button>
+            <button type="button" className="primary" onClick={pauseCustomList}>Pausar e sair</button>
+            {isSimulation && <button type="button" className="list-exit-finish" onClick={finishSimulation}>Finalizar agora e corrigir</button>}
+          </div>
+        </section>
+      </div>}
       {notice && <div className="toast">{notice}<button onClick={() => setNotice("")}>×</button></div>}
     </main>
   );
