@@ -34,6 +34,7 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
   const [name, setName] = useState("Minha lista");
   const [status, setStatus] = useState("unanswered");
   const [selectedAreas, setSelectedAreas] = useState([]);
+  const [collapsedAreas, setCollapsedAreas] = useState(() => new Set());
   const [quantities, setQuantities] = useState({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState("");
@@ -89,6 +90,11 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
 
   function addArea(area, topic) {
     setSelectedAreas(current => current.includes(area) ? current : [...current, area]);
+    setCollapsedAreas(current => {
+      const next = new Set(current);
+      next.delete(area);
+      return next;
+    });
     if (topic) {
       const group = catalog.find(item => item.area === area);
       const row = group?.topics.find(item => item.topic === topic);
@@ -105,9 +111,23 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
 
   function removeArea(area) {
     setSelectedAreas(current => current.filter(item => item !== area));
+    setCollapsedAreas(current => {
+      const next = new Set(current);
+      next.delete(area);
+      return next;
+    });
     setQuantities(current => Object.fromEntries(
       Object.entries(current).filter(([key]) => !key.startsWith(`${area}|||`))
     ));
+  }
+
+  function toggleArea(area) {
+    setCollapsedAreas(current => {
+      const next = new Set(current);
+      if (next.has(area)) next.delete(area);
+      else next.add(area);
+      return next;
+    });
   }
 
   function updateQuantity(area, topic, value, available) {
@@ -228,15 +248,26 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
             {selectedCatalog.length ? selectedCatalog.map(({ area, topics }) => {
               const areaSelected = topics.reduce((sum, { topic }) =>
                 sum + Number(quantities[`${area}|||${topic}`] || 0), 0);
-              return <article className="area-group expanded" key={area}>
+              const collapsed = collapsedAreas.has(area);
+              return <article className={`area-group ${collapsed ? "collapsed" : "expanded"}`} key={area}>
                 <div className="area-group-head">
-                  <div className="selected-area-title"><span>−</span><b>{area}</b><small>{areaSelected} selecionadas</small></div>
+                  <button
+                    type="button"
+                    className="selected-area-title"
+                    onClick={() => toggleArea(area)}
+                    aria-expanded={!collapsed}
+                    aria-label={`${collapsed ? "Expandir" : "Recolher"} ${area}`}
+                  >
+                    <span>{collapsed ? "+" : "−"}</span>
+                    <b>{area}</b>
+                    <small>{areaSelected} selecionadas</small>
+                  </button>
                   <button type="button" className="area-quick-select" onClick={() => selectArea(area, topics)}>
                     {areaSelected ? "Limpar área" : "5 de cada"}
                   </button>
                   <button type="button" className="remove-area-button" onClick={() => removeArea(area)}>×</button>
                 </div>
-                <div className="topic-picker">
+                {!collapsed && <div className="topic-picker">
                   {topics.map(({ topic, items }) => {
                     const key = `${area}|||${topic}`;
                     const available = availableFor(items);
@@ -246,9 +277,9 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
                       <label>Quantidade<input type="number" min="0" max={available} value={quantity}
                         disabled={!available}
                         onChange={event => updateQuantity(area, topic, event.target.value, available)} /></label>
-                    </div>;
+                      </div>;
                   })}
-                </div>
+                </div>}
               </article>;
             }) : <div className="no-selected-specialties"><span>+</span><b>Nenhuma especialidade adicionada</b><p>Use o botão acima para pesquisar e adicionar somente o que deseja estudar.</p></div>}
           </div>
@@ -258,12 +289,20 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
           <span className="eyebrow">RESUMO DA LISTA</span>
           <h2>{name.trim() || "Minha lista"}</h2>
           <strong>{totalRequested}</strong><p>questões selecionadas</p>
+          <div className="list-summary-check">
+            <span>✓</span>
+            <div><b>Confira antes de criar</b><small>Composição final da sua lista</small></div>
+          </div>
           <div className="list-summary-items">
             {selectedRows.length ? selectedRows.map(([key, quantity]) => {
               const [area, topic] = key.split("|||");
-              return <div key={key}><span><b>{topic}</b><small>{area}</small></span><strong>{quantity}</strong></div>;
+              return <div key={key} className="list-summary-row">
+                <b>{area} <em>›</em> {topic}</b>
+                <strong>({quantity})</strong>
+              </div>;
             }) : <small>Adicione especialidades e selecione os subtemas para montar a lista.</small>}
           </div>
+          <div className="list-summary-filter"><span>Filtro</span><b>{statusOptions.find(option => option.value === status)?.label}</b></div>
           {error && <div className="list-error">{error}</div>}
           <button type="button" className="primary list-generate" onClick={generate}>Gerar e salvar lista</button>
         </aside>
