@@ -401,6 +401,19 @@ export default function Home() {
     setPage(1);
     setHasSearched(true);
   }
+  function openQuestionBank() {
+    if (activeList) {
+      setActiveList(null);
+      localStorage.removeItem("medquestoes-active-list");
+      setNotice("A lista foi pausada e continua disponível em Listas criadas.");
+    }
+    setResponses({});
+    setReviewedQuestionId(null);
+    setHasSearched(false);
+    setPage(1);
+    setTab("questoes");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   function goToPage(nextPage) {
     setPage(nextPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -554,7 +567,7 @@ export default function Home() {
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav aria-label="Navegação principal">
           <button title="Início" className={tab === "inicio" ? "active" : ""} onClick={() => setTab("inicio")}><span>🏠</span><b>Início</b></button>
-          <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>📝</span><b>Questões</b></button>
+          <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={openQuestionBank}><span>📝</span><b>Questões</b></button>
           <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>📋</span><b>Listas</b></button>
           <button title="Simulados" className={tab === "simulados" ? "active" : ""} onClick={() => setTab("simulados")}><span>⏱️</span><b>Simulados</b></button>
           <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>📚</span><b>Biblioteca</b></button>
@@ -598,7 +611,7 @@ export default function Home() {
           activeListStats={activeListStats}
           isSimulation={isSimulation}
           simulationClock={simulationClock}
-          onNavigate={setTab}
+          onNavigate={nextTab => nextTab === "questoes" ? openQuestionBank() : setTab(nextTab)}
           onResume={() => setTab("questoes")}
         />
       ) : tab === "questoes" ? (

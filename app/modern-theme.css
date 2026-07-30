@@ -450,3 +450,18 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 @media(max-width:520px){.case-station-top{align-items:flex-start}.case-intro,.case-vitals,.case-update,.case-question{margin-left:16px;margin-right:16px}.case-model>div{flex-direction:column}.case-model>div button{width:100%}}
 @media(max-width:520px){.calendar-overview{grid-template-columns:1fr}.calendar-overview__card{padding:12px}.calendar-overview__card--quick{order:4}.calendar-week{padding:14px}.calendar-workspace{gap:12px}.calendar-month,.calendar-day-panel{padding:12px}.calendar-month-day{height:62px;padding:4px}.calendar-month-day__items{display:flex}.calendar-month-day__item{width:5px;height:5px;padding:0;border-radius:50%}.calendar-month-day__item>span,.calendar-month-day__more{display:none}.calendar-day-panel__events{grid-template-columns:1fr}.calendar-form{grid-template-columns:1fr;padding:16px}.calendar-form__field,.calendar-form__field--full{grid-column:1}.calendar-form__actions{flex-direction:column-reverse}.calendar-form__actions button{width:100%}.calendar-header .calendar-primary-button{width:100%}}
 .theme-dark .list-exit-finish{border-color:#7c4448;background:#351d20;color:#f29a9a}
+.theme-dark :is(.sidebar-toggle,.next,.add-specialty-button,.specialty-picker,.specialty-search,.specialty-search button,.area-quick-select,.case-list button,.case-model>div button,.calendar-overview__quick-actions button,.calendar-empty-state button,.calendar-modal__close,.study-plan-form__actions button,.library-filter,.library-state>button){border-color:#315048;background:#0b201c;color:var(--ink)}
+.theme-dark :is(.add-specialty-button:hover,.specialty-area-result:hover,.specialty-topic-result:hover,.case-list button:hover,.calendar-overview__quick-actions button:hover){border-color:#4fae9d;background:#15322c;color:#edf6f2}
+.theme-dark :is(.specialty-area-result,.specialty-topic-result){color:var(--ink)}
+.theme-dark :is(.case-list button.active,.calendar-week-day--today){border-color:#397d6f;background:#153a32;color:var(--ink)}
+.theme-dark :is(.question-meta .attempt-badge,.calendar-overview__card--today>button,.calendar-week__summary strong,.calendar-event__check,.study-plan-form__title>span,.library-panel-icon,.library-empty-icon,.created-lists-empty span,.no-selected-specialties>span,.selected-area-title>span,.area-group-head>button:first-child>span){background:#17372f;color:#93ddcc}
+.theme-dark :is(.remove-area-button,.list-error,.study-plan-form__error,.library-feedback.is-error){border-color:#744247;background:#351d20;color:#f0b4b4}
+.theme-dark :is(.retry-button,.simulation-timer.ending,.home-tip){border-color:#705f37;background:#332d1d;color:#e6c77f}
+.theme-dark :is(.library-field,.calendar-form__field){color:#afc4bd}
+.theme-dark :is(.case-complete>span,.library-feedback.is-success){background:#153a2b;color:#9ee1ba}
+.theme-dark .calendar-event__check{background:#102722;color:var(--event-color)}
+.theme-dark :is(.no-selected-specialties,.library-file-picker,.case-intro,.dropzone,.format,.calendar-week__summary span){border-color:#315048;background:#0b201c;color:var(--ink)}
+.theme-dark .calendar-overview__icon{background:#17372f;color:#edf6f2}
+.theme-dark .calendar-overview__card--next .calendar-overview__icon{background:#3b2d1c}
+.theme-dark .calendar-overview__card--progress .calendar-overview__icon{background:#292443}
+.theme-dark :is(.eyebrow,[class*="eyebrow"],.calendar-section-kicker,.case-list span,.case-station-top span,.case-intro>b,.case-question>span,.case-model>span,.daily-value){color:#72d6c2}
