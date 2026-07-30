@@ -8,6 +8,7 @@ import ListBuilder from "./ListBuilder.jsx";
 import Library from "./Library.jsx";
 import ClinicalCases from "./ClinicalCases.jsx";
 import Calendar from "./Calendar.jsx";
+import HomeDashboard from "./HomeDashboard.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -120,7 +121,7 @@ function parseQuestions(raw, fallbackArea, fallbackTopic) {
 }
 
 export default function Home() {
-  const [tab, setTab] = useState("questoes");
+  const [tab, setTab] = useState("inicio");
   const [questions, setQuestions] = useState(seed);
   const [area, setArea] = useState("Todas");
   const [topic, setTopic] = useState("Todos");
@@ -430,22 +431,20 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function closeCustomList() {
-    const destination = activeList?.kind === "simulado" ? "simulados" : "listas";
     setListExitOpen(false);
     setActiveList(null);
     localStorage.removeItem("medquestoes-active-list");
     setHasSearched(false);
     setPage(1);
-    setTab(destination);
+    setTab("inicio");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function confirmPauseCustomList() {
     setListExitOpen(true);
   }
   function pauseCustomList() {
-    const destination = activeList?.kind === "simulado" ? "simulados" : "listas";
     setListExitOpen(false);
-    setTab(destination);
+    setTab("inicio");
     setNotice(`${activeList.kind === "simulado" ? "Simulado" : "Lista"} “${activeList.name}” pausado${activeList.kind === "simulado" ? "" : "a"}. Seu progresso foi mantido.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -553,6 +552,7 @@ export default function Home() {
         </button>
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav aria-label="Navegação principal">
+          <button title="Início" className={tab === "inicio" ? "active" : ""} onClick={() => setTab("inicio")}><span>🏠</span><b>Início</b></button>
           <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>📝</span><b>Questões</b></button>
           <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>📋</span><b>Listas</b></button>
           <button title="Simulados" className={tab === "simulados" ? "active" : ""} onClick={() => setTab("simulados")}><span>⏱️</span><b>Simulados</b></button>
@@ -586,7 +586,20 @@ export default function Home() {
       </aside>
 
       <div className="app-content">
-      {tab === "questoes" ? (
+      {tab === "inicio" ? (
+        <HomeDashboard
+          questionCount={questions.length}
+          answeredCount={answeredCount}
+          attempts={attempts}
+          gameStats={gameStats}
+          activeList={activeList}
+          activeListStats={activeListStats}
+          isSimulation={isSimulation}
+          simulationClock={simulationClock}
+          onNavigate={setTab}
+          onResume={() => setTab("questoes")}
+        />
+      ) : tab === "questoes" ? (
         <>
           <section className={`${hasSearched ? "workspace" : "filter-landing"} ${activeList ? "workspace--active-list" : ""}`}>
             {!activeList && <aside className="filters">
@@ -673,7 +686,7 @@ export default function Home() {
                       </div>;
                     })}
                   </div>
-                  <button type="button" className="primary list-performance-finish" onClick={closeCustomList}>{isSimulation ? "Encerrar e voltar aos simulados" : "Encerrar e voltar às listas"}</button>
+                  <button type="button" className="primary list-performance-finish" onClick={closeCustomList}>Encerrar e voltar ao início</button>
                 </section>}
               </> : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>}
