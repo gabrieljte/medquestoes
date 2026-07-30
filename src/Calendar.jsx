@@ -11,11 +11,11 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_META = {
-  'Horário de aulas': { icon: '▣', slug: 'aulas' },
-  Provas: { icon: '◆', slug: 'provas' },
-  Atividades: { icon: '✓', slug: 'atividades' },
-  Ambulatórios: { icon: '✚', slug: 'ambulatorios' },
-  Extracurriculares: { icon: '★', slug: 'extracurriculares' },
+  'Horário de aulas': { icon: '🎓', slug: 'aulas' },
+  Provas: { icon: '📝', slug: 'provas' },
+  Atividades: { icon: '✅', slug: 'atividades' },
+  Ambulatórios: { icon: '🩺', slug: 'ambulatorios' },
+  Extracurriculares: { icon: '⭐', slug: 'extracurriculares' },
 };
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -230,6 +230,7 @@ export default function Calendar() {
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [activeCategories, setActiveCategories] = useState(() => new Set(CATEGORIES));
+  const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState(() => ({ ...EMPTY_FORM, date: todayKey }));
   const [editingId, setEditingId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -255,22 +256,62 @@ export default function Calendar() {
   }, [monthCursor]);
 
   const visibleCategorySet = activeCategories;
+  const filteredEvents = useMemo(() => {
+    const term = searchQuery.trim().toLocaleLowerCase('pt-BR');
+    if (!term) return events;
+    return events.filter((event) =>
+      [event.title, event.description, event.category]
+        .join(' ')
+        .toLocaleLowerCase('pt-BR')
+        .includes(term),
+    );
+  }, [events, searchQuery]);
+
   const weekOccurrences = useMemo(
     () =>
       weekDays.flatMap((day) =>
-        eventsForDate(events, dateToKey(day), visibleCategorySet),
+        eventsForDate(filteredEvents, dateToKey(day), visibleCategorySet),
       ),
-    [events, visibleCategorySet, weekDays],
+    [filteredEvents, visibleCategorySet, weekDays],
   );
 
   const selectedEvents = useMemo(
-    () => eventsForDate(events, selectedDate, visibleCategorySet),
-    [events, selectedDate, visibleCategorySet],
+    () => eventsForDate(filteredEvents, selectedDate, visibleCategorySet),
+    [filteredEvents, selectedDate, visibleCategorySet],
+  );
+
+  const todayEvents = useMemo(
+    () => eventsForDate(filteredEvents, todayKey, visibleCategorySet),
+    [filteredEvents, todayKey, visibleCategorySet],
   );
 
   const pendingThisWeek = weekOccurrences.filter(
     (event) => !isOccurrenceCompleted(event, event.occurrenceDate),
   ).length;
+  const completedThisWeek = weekOccurrences.length - pendingThisWeek;
+  const weekProgress = weekOccurrences.length
+    ? Math.round((completedThisWeek / weekOccurrences.length) * 100)
+    : 0;
+  const pendingToday = todayEvents.filter(
+    (event) => !isOccurrenceCompleted(event, event.occurrenceDate),
+  ).length;
+
+  const nextOccurrence = useMemo(() => {
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes(),
+    ).padStart(2, '0')}`;
+    for (let offset = 0; offset < 120; offset += 1) {
+      const dateKey = dateToKey(addDays(now, offset));
+      const candidates = eventsForDate(filteredEvents, dateKey, visibleCategorySet).filter(
+        (event) =>
+          !isOccurrenceCompleted(event, dateKey) &&
+          (offset > 0 || event.endTime >= currentTime),
+      );
+      if (candidates.length) return candidates[0];
+    }
+    return null;
+  }, [filteredEvents, visibleCategorySet, todayKey]);
 
   function toggleFilter(category) {
     setActiveCategories((current) => {
@@ -281,14 +322,14 @@ export default function Calendar() {
     });
   }
 
-  function resetForm(date = selectedDate) {
+  function resetForm(date = selectedDate, category = CATEGORIES[0]) {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, date });
+    setForm({ ...EMPTY_FORM, date, category });
     setFormError('');
   }
 
-  function openNewEvent(date = selectedDate) {
-    resetForm(date);
+  function openNewEvent(date = selectedDate, category = CATEGORIES[0]) {
+    resetForm(date, category);
     setFormOpen(true);
   }
 
@@ -439,11 +480,97 @@ export default function Calendar() {
         </button>
       </header>
 
+      <section className="calendar-overview" aria-label="Resumo da agenda">
+        <article className="calendar-overview__card calendar-overview__card--today">
+          <div className="calendar-overview__icon" aria-hidden="true">☀️</div>
+          <div>
+            <span>Hoje</span>
+            <strong>{formatLongDate(todayKey)}</strong>
+            <small>
+              {todayEvents.length
+                ? `${todayEvents.length} compromisso${todayEvents.length === 1 ? '' : 's'} · ${pendingToday} pendente${pendingToday === 1 ? '' : 's'}`
+                : 'Nenhum compromisso — aproveite para revisar'}
+            </small>
+          </div>
+          <button type="button" onClick={() => openNewEvent(todayKey, 'Atividades')}>
+            ＋
+          </button>
+        </article>
+
+        <article className="calendar-overview__card calendar-overview__card--next">
+          <div className="calendar-overview__icon" aria-hidden="true">⏰</div>
+          <div>
+            <span>Próximo compromisso</span>
+            {nextOccurrence ? (
+              <>
+                <strong>{nextOccurrence.title}</strong>
+                <small>
+                  {formatShortDate(nextOccurrence.occurrenceDate)} · {nextOccurrence.startTime} ·{' '}
+                  {CATEGORY_META[nextOccurrence.category].icon} {nextOccurrence.category}
+                </small>
+              </>
+            ) : (
+              <>
+                <strong>Agenda livre</strong>
+                <small>Nada pendente nos próximos dias</small>
+              </>
+            )}
+          </div>
+        </article>
+
+        <article className="calendar-overview__card calendar-overview__card--progress">
+          <div className="calendar-overview__icon" aria-hidden="true">🎯</div>
+          <div>
+            <span>Progresso da semana</span>
+            <strong>{weekProgress}% concluído</strong>
+            <small>{completedThisWeek} de {weekOccurrences.length} compromissos finalizados</small>
+            <div className="calendar-overview__progress" aria-hidden="true">
+              <i style={{ width: `${weekProgress}%` }} />
+            </div>
+          </div>
+        </article>
+
+        <article className="calendar-overview__card calendar-overview__card--quick">
+          <div>
+            <span>Adicionar rápido</span>
+            <strong>O que entrou na agenda?</strong>
+          </div>
+          <div className="calendar-overview__quick-actions">
+            {CATEGORIES.slice(0, 4).map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => openNewEvent(selectedDate, category)}
+                title={`Adicionar ${category.toLocaleLowerCase('pt-BR')}`}
+              >
+                <span aria-hidden="true">{CATEGORY_META[category].icon}</span>
+                {category === 'Horário de aulas' ? 'Aula' : category}
+              </button>
+            ))}
+          </div>
+        </article>
+      </section>
+
       <div className="calendar-filters" aria-label="Filtros do calendário">
         <div className="calendar-filters__label">
           <span>Filtrar agenda</span>
           <small>{activeCategories.size} de {CATEGORIES.length} categorias</small>
         </div>
+        <label className="calendar-search">
+          <span aria-hidden="true">🔎</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar compromisso..."
+            aria-label="Buscar compromisso"
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpar busca">
+              ×
+            </button>
+          )}
+        </label>
         <div className="calendar-filters__options">
           {CATEGORIES.map((category) => {
             const active = activeCategories.has(category);
@@ -516,13 +643,14 @@ export default function Calendar() {
         <div className="calendar-week__grid">
           {weekDays.map((day) => {
             const key = dateToKey(day);
-            const dayEvents = eventsForDate(events, key, visibleCategorySet);
+            const dayEvents = eventsForDate(filteredEvents, key, visibleCategorySet);
             return (
               <div
                 key={key}
                 className={[
                   'calendar-week-day',
                   key === todayKey ? 'calendar-week-day--today' : '',
+                  key === selectedDate ? 'calendar-week-day--selected' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -603,7 +731,7 @@ export default function Calendar() {
           <div className="calendar-month__grid">
             {monthDays.map((day) => {
               const key = dateToKey(day);
-              const dayEvents = eventsForDate(events, key, visibleCategorySet);
+              const dayEvents = eventsForDate(filteredEvents, key, visibleCategorySet);
               const outside = day.getMonth() !== monthCursor.getMonth();
               const selected = key === selectedDate;
               return (

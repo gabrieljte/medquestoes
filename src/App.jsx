@@ -432,13 +432,13 @@ export default function Home() {
         </button>
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav aria-label="Navegação principal">
-          <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>?</span><b>Questões</b></button>
-          <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>☷</span><b>Listas</b></button>
-          <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>▧</span><b>Biblioteca</b></button>
-          <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>♧</span><b>Casos clínicos</b></button>
-          <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>□</span><b>Calendário</b></button>
-          <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>↗</span><b>Desempenho</b></button>
-          <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>＋</span><b>Adicionar</b></button>
+          <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>📝</span><b>Questões</b></button>
+          <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>📋</span><b>Listas</b></button>
+          <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>📚</span><b>Biblioteca</b></button>
+          <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>🩺</span><b>Casos clínicos</b></button>
+          <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>📅</span><b>Calendário</b></button>
+          <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>📊</span><b>Desempenho</b></button>
+          <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>➕</span><b>Adicionar</b></button>
         </nav>
         <div className="sidebar-bottom">
           <div className={`game-hud ${gameStats.currentStreak >= 3 ? "on-fire" : ""}`}>
