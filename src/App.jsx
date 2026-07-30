@@ -7,6 +7,7 @@ import Dashboard from "./Dashboard.jsx";
 import ListBuilder from "./ListBuilder.jsx";
 import Library from "./Library.jsx";
 import ClinicalCases from "./ClinicalCases.jsx";
+import Calendar from "./Calendar.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -144,6 +145,9 @@ export default function Home() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    localStorage.getItem("medquestoes-sidebar-collapsed") === "true"
+  );
   const [importArea, setImportArea] = useState("Cardiologia");
   const [importTopic, setImportTopic] = useState("Doença isquêmica");
   const [draft, setDraft] = useState({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
@@ -339,6 +343,13 @@ export default function Home() {
     setHasSearched(false);
     setPage(1);
   }
+  function toggleSidebar() {
+    setSidebarCollapsed(current => {
+      const next = !current;
+      localStorage.setItem("medquestoes-sidebar-collapsed", String(next));
+      return next;
+    });
+  }
   function selectOption(questionId, option) {
     const localResponse = responses[questionId];
     if (localResponse?.answered) return;
@@ -412,14 +423,20 @@ export default function Home() {
   if (!session && !offlineMode) return <AuthScreen onOffline={() => setOfflineMode(true)} />;
 
   return (
-    <main className={`app-shell heat-${gameStats.stage}`}>
+    <main className={`app-shell heat-${gameStats.stage} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="nav-sidebar">
+        <button className="sidebar-toggle" type="button" onClick={toggleSidebar}
+          aria-label={sidebarCollapsed ? "Abrir menu lateral" : "Fechar menu lateral"}
+          title={sidebarCollapsed ? "Abrir menu" : "Recolher menu"}>
+          {sidebarCollapsed ? "›" : "‹"}
+        </button>
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav aria-label="Navegação principal">
           <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={() => setTab("questoes")}><span>?</span><b>Questões</b></button>
           <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>☷</span><b>Listas</b></button>
           <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>▧</span><b>Biblioteca</b></button>
           <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>♧</span><b>Casos clínicos</b></button>
+          <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>□</span><b>Calendário</b></button>
           <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>↗</span><b>Desempenho</b></button>
           <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>＋</span><b>Adicionar</b></button>
         </nav>
@@ -498,6 +515,8 @@ export default function Home() {
         <Library areas={Object.keys(topicMap)} />
       ) : tab === "casos" ? (
         <ClinicalCases />
+      ) : tab === "calendario" ? (
+        <Calendar />
       ) : tab === "dashboard" ? (
         <Dashboard attempts={attempts} />
       ) : (
