@@ -245,6 +245,62 @@ export default function Home() {
     });
   }, [questions, area, topic, difficulty, tag, answerStatus, search, latestAttemptByQuestion, reviewedQuestionId, activeList]);
 
+  const activeListAttemptByQuestion = useMemo(() => {
+    const latest = new Map();
+    if (!activeList?.ids?.length) return latest;
+    const ids = new Set(activeList.ids.map(String));
+    const startedAt = new Date(activeList.startedAt || activeList.createdAt || 0).getTime();
+    [...attempts]
+      .filter(attempt =>
+        ids.has(String(attempt.questionId)) &&
+        new Date(attempt.answeredAt).getTime() >= startedAt
+      )
+      .sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt))
+      .forEach(attempt => latest.set(String(attempt.questionId), attempt));
+    return latest;
+  }, [attempts, activeList]);
+
+  const activeListStats = useMemo(() => {
+    const sessionAttempts = [...activeListAttemptByQuestion.values()]
+      .sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
+    const answered = sessionAttempts.length;
+    const correct = sessionAttempts.filter(attempt => attempt.correct).length;
+    const wrong = answered - correct;
+    let runningStreak = 0;
+    let bestStreak = 0;
+    const breakdownMap = new Map();
+    sessionAttempts.forEach(attempt => {
+      if (attempt.correct) {
+        runningStreak += 1;
+        bestStreak = Math.max(bestStreak, runningStreak);
+      } else {
+        runningStreak = 0;
+      }
+      const key = `${attempt.area}|||${attempt.topic}`;
+      const current = breakdownMap.get(key) || {
+        area: attempt.area,
+        topic: attempt.topic,
+        answered: 0,
+        correct: 0
+      };
+      current.answered += 1;
+      current.correct += attempt.correct ? 1 : 0;
+      breakdownMap.set(key, current);
+    });
+    const total = activeList?.ids?.length || 0;
+    return {
+      total,
+      answered,
+      correct,
+      wrong,
+      bestStreak,
+      percentage: answered ? Math.round((correct / answered) * 100) : 0,
+      progress: total ? Math.min(100, Math.round((answered / total) * 100)) : 0,
+      completed: Boolean(total && answered >= total),
+      breakdown: [...breakdownMap.values()]
+    };
+  }, [activeList, activeListAttemptByQuestion]);
+
   const gameStats = useMemo(() => {
     const ordered = [...attempts].sort((a, b) => new Date(a.answeredAt) - new Date(b.answeredAt));
     let currentStreak = 0;
@@ -320,14 +376,13 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function startCustomList(list) {
-    setActiveList(list);
-    localStorage.setItem("medquestoes-active-list", JSON.stringify(list));
+    const sessionList = { ...list, startedAt: new Date().toISOString() };
+    setActiveList(sessionList);
+    localStorage.setItem("medquestoes-active-list", JSON.stringify(sessionList));
     setResponses(current => {
       const next = { ...current };
-      list.ids.forEach(id => {
-        if (latestAttemptByQuestion.has(String(id))) {
-          next[id] = { selected: null, answered: false, retrying: true };
-        }
+      sessionList.ids.forEach(id => {
+        next[id] = { selected: null, answered: false, retrying: true };
       });
       return next;
     });
@@ -342,6 +397,17 @@ export default function Home() {
     localStorage.removeItem("medquestoes-active-list");
     setHasSearched(false);
     setPage(1);
+    setTab("listas");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function confirmPauseCustomList() {
+    const confirmed = window.confirm(
+      `Pausar a lista “${activeList?.name || "atual"}” e voltar ao menu de listas?\n\nSeu progresso continuará salvo e você poderá retomar depois.`
+    );
+    if (!confirmed) return;
+    setTab("listas");
+    setNotice(`Lista “${activeList.name}” pausada. Seu progresso foi mantido.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function toggleSidebar() {
     setSidebarCollapsed(current => {
@@ -353,7 +419,11 @@ export default function Home() {
   function selectOption(questionId, option) {
     const localResponse = responses[questionId];
     if (localResponse?.answered) return;
-    if (latestAttemptByQuestion.has(String(questionId)) && !localResponse?.retrying) return;
+    if (
+      latestAttemptByQuestion.has(String(questionId)) &&
+      !localResponse?.retrying &&
+      !(activeList && !activeListAttemptByQuestion.has(String(questionId)))
+    ) return;
     setResponses(r => ({ ...r, [questionId]: { ...r[questionId], selected: option, answered: false } }));
   }
   async function answer(question) {
@@ -456,8 +526,8 @@ export default function Home() {
       <div className="app-content">
       {tab === "questoes" ? (
         <>
-          <section className={hasSearched ? "workspace" : "filter-landing"}>
-            <aside className="filters">
+          <section className={`${hasSearched ? "workspace" : "filter-landing"} ${activeList ? "workspace--active-list" : ""}`}>
+            {!activeList && <aside className="filters">
               <div className="side-title"><b>Encontre suas questões</b><button onClick={clearFilters}>Limpar</button></div>
               {!hasSearched && <div className="filter-intro"><span className="eyebrow">BANCO MÉDICO</span><h1>O que você quer estudar hoje?</h1><p>Escolha os filtros e carregue somente as questões que deseja resolver.</p></div>}
               <label>Buscar questão<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Digite uma palavra-chave..." /></label>
@@ -469,14 +539,14 @@ export default function Home() {
               <div className="result-count"><b>{filtered.length}</b><span>questões encontradas</span></div>
               <div className="study-progress"><div><span>Progresso do banco</span><b>{answeredCount}/{questions.length} · {studyProgress}%</b></div><span><i style={{ width: `${studyProgress}%` }} /></span></div>
               <button className="primary filter-submit" onClick={applyFilters}>Buscar questões</button>
-            </aside>
-            {hasSearched && <section className="question-area">
+            </aside>}
+            {hasSearched && <section className={`question-area ${activeList ? "question-area--active-list" : ""}`}>
               {activeList && <div className="active-list-banner">
-                <div><span>LISTA ATIVA</span><b>{activeList.name}</b><small>{activeList.ids.length} questões personalizadas</small></div>
-                <button type="button" onClick={closeCustomList}>Encerrar lista</button>
+                <div><span>LISTA ATIVA</span><b>{activeList.name}</b><small>{activeListStats.answered} de {activeListStats.total} respondidas · {activeListStats.progress}% concluído</small></div>
+                <div className="active-list-progress" aria-hidden="true"><i style={{ width: `${activeListStats.progress}%` }} /></div>
               </div>}
-              {filtered.length > pageSize && <div className="question-toolbar">
-                <span><b>{filtered.length}</b> questões · 10 por página</span>
+              {(filtered.length > pageSize || activeList) && <div className="question-toolbar">
+                <span>{activeList ? <><b>{activeListStats.answered}/{activeListStats.total}</b> respondidas</> : <><b>{filtered.length}</b> questões · 10 por página</>}</span>
                 <div className="page-squares" aria-label="Paginação">
                   <button disabled={page === 1} onClick={() => goToPage(page - 1)} aria-label="Página anterior">‹</button>
                   {pageItems.map(item => typeof item === "number"
@@ -484,10 +554,14 @@ export default function Home() {
                     : <span key={item}>…</span>
                   )}
                   <button disabled={page === totalPages} onClick={() => goToPage(page + 1)} aria-label="Próxima página">›</button>
+                  {activeList && <button type="button" className="active-list-close" onClick={confirmPauseCustomList} aria-label="Pausar e sair da lista" title="Pausar e sair da lista">×</button>}
                 </div>
               </div>}
-              {filtered.length ? visibleQuestions.map((q, questionIndex) => {
-                const savedAttempt = latestAttemptByQuestion.get(String(q.id));
+              {filtered.length ? <>
+                {visibleQuestions.map((q, questionIndex) => {
+                const savedAttempt = activeList
+                  ? activeListAttemptByQuestion.get(String(q.id))
+                  : latestAttemptByQuestion.get(String(q.id));
                 const response = responses[q.id] || (savedAttempt ? { selected: savedAttempt.selectedAnswer, answered: true } : {});
                 return <article className="question-card" key={q.id}>
                   <div className="question-meta">{q.tag && <span className="source-tag">{q.tag}</span>}<span>{q.area}</span><span>{q.topic}</span><span className={`difficulty ${q.difficulty}`}>{q.difficulty}</span>{attemptCountByQuestion.has(String(q.id)) && <span className="attempt-badge">{attemptCountByQuestion.get(String(q.id))}× respondida</span>}<small>Questão {(page - 1) * pageSize + questionIndex + 1} de {filtered.length}</small></div>
@@ -505,7 +579,31 @@ export default function Home() {
                       ? <button className="retry-button" onClick={() => retryQuestion(q.id)}>↻ Responder novamente</button>
                       : <button className="primary" disabled={response.selected == null} onClick={() => answer(q)}>{response.retrying ? "Confirmar nova resposta" : "Confirmar resposta"}</button>}</div>
                 </article>;
-              }) : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
+              })}
+                {activeList && activeListStats.completed && page === totalPages && <section className="list-performance-summary">
+                  <div className="list-performance-heading">
+                    <span>🏁</span>
+                    <div><small>LISTA CONCLUÍDA</small><h2>Resumo do seu desempenho</h2><p>{activeList.name}</p></div>
+                  </div>
+                  <div className="list-performance-metrics">
+                    <div><span>Acertos</span><b>{activeListStats.correct}</b><small>de {activeListStats.total}</small></div>
+                    <div><span>Erros</span><b>{activeListStats.wrong}</b><small>questões</small></div>
+                    <div className="accent"><span>Aproveitamento</span><b>{activeListStats.percentage}%</b><small>{activeListStats.percentage >= 70 ? "Ótimo resultado" : "Continue revisando"}</small></div>
+                    <div><span>Melhor sequência</span><b>🔥 {activeListStats.bestStreak}</b><small>acertos seguidos</small></div>
+                  </div>
+                  <div className="list-performance-breakdown">
+                    <div className="list-performance-breakdown__title"><b>Desempenho por conteúdo</b><span>Acertos / respondidas</span></div>
+                    {activeListStats.breakdown.map(item => {
+                      const percentage = Math.round((item.correct / item.answered) * 100);
+                      return <div className="list-performance-row" key={`${item.area}-${item.topic}`}>
+                        <div><b>{item.area} <em>›</em> {item.topic}</b><span><i style={{ width: `${percentage}%` }} /></span></div>
+                        <strong>{item.correct}/{item.answered} · {percentage}%</strong>
+                      </div>;
+                    })}
+                  </div>
+                  <button type="button" className="primary list-performance-finish" onClick={closeCustomList}>Encerrar e voltar às listas</button>
+                </section>}
+              </> : <div className="empty"><b>Nenhuma questão encontrada</b><p>Ajuste os filtros ou adicione novas questões ao banco.</p></div>}
             </section>}
           </section>
         </>
