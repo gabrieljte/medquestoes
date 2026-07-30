@@ -3,6 +3,7 @@ const ACTIONS = [
   { tab: "listas", icon: "📋", title: "Criar uma lista", text: "Monte uma sessão personalizada de estudos." },
   { tab: "simulados", icon: "⏱️", title: "Fazer um simulado", text: "Treine com cronômetro e correção no final." },
   { tab: "casos", icon: "🩺", title: "Casos clínicos", text: "Conduza pacientes em estações estilo OSCE." },
+  { tab: "organizacao", icon: "🗂️", title: "Organizar estudos", text: "Registre metas, materiais, prazos e links." },
   { tab: "biblioteca", icon: "📚", title: "Abrir biblioteca", text: "Revise imagens e materiais que você salvou." },
   { tab: "dashboard", icon: "📊", title: "Ver desempenho", text: "Acompanhe sua evolução por período e área." }
 ];

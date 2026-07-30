@@ -9,6 +9,7 @@ import Library from "./Library.jsx";
 import ClinicalCases from "./ClinicalCases.jsx";
 import Calendar from "./Calendar.jsx";
 import HomeDashboard from "./HomeDashboard.jsx";
+import StudyOrganizer from "./StudyOrganizer.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -558,6 +559,7 @@ export default function Home() {
           <button title="Simulados" className={tab === "simulados" ? "active" : ""} onClick={() => setTab("simulados")}><span>⏱️</span><b>Simulados</b></button>
           <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>📚</span><b>Biblioteca</b></button>
           <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>🩺</span><b>Casos clínicos</b></button>
+          <button title="Organização" className={tab === "organizacao" ? "active" : ""} onClick={() => setTab("organizacao")}><span>🗂️</span><b>Organização</b></button>
           <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>📅</span><b>Calendário</b></button>
           <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>📊</span><b>Desempenho</b></button>
           <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>➕</span><b>Adicionar</b></button>
@@ -700,6 +702,8 @@ export default function Home() {
         <Library areas={Object.keys(topicMap)} />
       ) : tab === "casos" ? (
         <ClinicalCases />
+      ) : tab === "organizacao" ? (
+        <StudyOrganizer />
       ) : tab === "calendario" ? (
         <Calendar />
       ) : tab === "dashboard" ? (

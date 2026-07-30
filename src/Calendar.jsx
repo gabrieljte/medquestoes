@@ -19,6 +19,15 @@ const CATEGORY_META = {
 };
 
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const WEEKDAY_OPTIONS = [
+  { label: 'Seg', value: 1 },
+  { label: 'Ter', value: 2 },
+  { label: 'Qua', value: 3 },
+  { label: 'Qui', value: 4 },
+  { label: 'Sex', value: 5 },
+  { label: 'Sáb', value: 6 },
+  { label: 'Dom', value: 0 },
+];
 
 const EMPTY_FORM = {
   title: '',
@@ -28,6 +37,8 @@ const EMPTY_FORM = {
   endTime: '09:00',
   description: '',
   weekly: false,
+  repeatWeekdays: [],
+  repeatUntil: '',
 };
 
 function dateToKey(date) {
@@ -105,15 +116,30 @@ function makeId() {
 }
 
 function normalizeEvent(event) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(event.date || '')
+    ? event.date
+    : dateToKey(new Date());
+  const repeatWeekdays = Array.isArray(event.repeatWeekdays)
+    ? [...new Set(event.repeatWeekdays.map(Number).filter((day) => day >= 0 && day <= 6))]
+    : [];
+  const weekly = Boolean(event.weekly);
   return {
     id: String(event.id || makeId()),
     title: String(event.title || ''),
     category: CATEGORIES.includes(event.category) ? event.category : CATEGORIES[0],
-    date: /^\d{4}-\d{2}-\d{2}$/.test(event.date || '') ? event.date : dateToKey(new Date()),
+    date,
     startTime: String(event.startTime || '08:00'),
     endTime: String(event.endTime || '09:00'),
     description: String(event.description || ''),
-    weekly: Boolean(event.weekly && event.category === 'Horário de aulas'),
+    weekly,
+    repeatWeekdays: weekly && repeatWeekdays.length
+      ? repeatWeekdays
+      : weekly
+        ? [keyToDate(date).getDay()]
+        : [],
+    repeatUntil: /^\d{4}-\d{2}-\d{2}$/.test(event.repeatUntil || '')
+      ? event.repeatUntil
+      : '',
     completed: Boolean(event.completed),
     completedDates: Array.isArray(event.completedDates)
       ? event.completedDates.filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item))
@@ -134,7 +160,11 @@ function loadEvents() {
 function occursOn(event, dateKey) {
   if (!event.weekly) return event.date === dateKey;
   if (dateKey < event.date) return false;
-  return keyToDate(event.date).getDay() === keyToDate(dateKey).getDay();
+  if (event.repeatUntil && dateKey > event.repeatUntil) return false;
+  const weekdays = event.repeatWeekdays?.length
+    ? event.repeatWeekdays
+    : [keyToDate(event.date).getDay()];
+  return weekdays.includes(keyToDate(dateKey).getDay());
 }
 
 function isOccurrenceCompleted(event, occurrenceDate) {
@@ -154,6 +184,13 @@ function eventsForDate(events, dateKey, activeCategories) {
     .filter((event) => activeCategories.has(event.category) && occursOn(event, dateKey))
     .map((event) => ({ ...event, occurrenceDate: dateKey }))
     .sort(sortOccurrences);
+}
+
+function repeatSummary(event) {
+  const labels = WEEKDAY_OPTIONS
+    .filter((weekday) => event.repeatWeekdays?.includes(weekday.value))
+    .map((weekday) => weekday.label);
+  return labels.length ? `↻ ${labels.join(', ')}` : '↻ Semanal';
 }
 
 function CalendarEventCard({ event, compact = false, onToggle, onEdit, onDelete }) {
@@ -189,7 +226,7 @@ function CalendarEventCard({ event, compact = false, onToggle, onEdit, onDelete 
           <span className="calendar-event__time">
             {event.startTime}–{event.endTime}
           </span>
-          {event.weekly && <span className="calendar-event__repeat">↻ Semanal</span>}
+          {event.weekly && <span className="calendar-event__repeat">{repeatSummary(event)}</span>}
         </div>
         <strong className="calendar-event__title">{event.title}</strong>
         {!compact && (
@@ -337,8 +374,20 @@ export default function Calendar() {
     const { name, value, type, checked } = event.target;
     setForm((current) => {
       const next = { ...current, [name]: type === 'checkbox' ? checked : value };
-      if (name === 'category' && value !== 'Horário de aulas') next.weekly = false;
+      if (name === 'weekly' && checked && !current.repeatWeekdays.length) {
+        next.repeatWeekdays = [keyToDate(current.date || selectedDate).getDay()];
+      }
       return next;
+    });
+    setFormError('');
+  }
+
+  function toggleRepeatWeekday(day) {
+    setForm((current) => {
+      const selected = new Set(current.repeatWeekdays);
+      if (selected.has(day)) selected.delete(day);
+      else selected.add(day);
+      return { ...current, repeatWeekdays: [...selected] };
     });
     setFormError('');
   }
@@ -354,8 +403,18 @@ export default function Calendar() {
       setFormError('O horário de término precisa ser depois do início.');
       return;
     }
+    if (form.weekly && !form.repeatWeekdays.length) {
+      setFormError('Escolha pelo menos um dia da semana para repetir.');
+      return;
+    }
+    if (form.weekly && form.repeatUntil && form.repeatUntil < form.date) {
+      setFormError('A data final da repetição precisa ser igual ou posterior à data inicial.');
+      return;
+    }
 
-    const weekly = form.category === 'Horário de aulas' && form.weekly;
+    const weekly = Boolean(form.weekly);
+    const repeatWeekdays = weekly ? [...new Set(form.repeatWeekdays)].sort() : [];
+    const repeatUntil = weekly ? form.repeatUntil : '';
     if (editingId) {
       setEvents((current) =>
         current.map((item) =>
@@ -369,6 +428,8 @@ export default function Calendar() {
                 endTime: form.endTime,
                 description: form.description.trim(),
                 weekly,
+                repeatWeekdays,
+                repeatUntil,
                 completed:
                   !weekly && item.weekly
                     ? item.completedDates.includes(form.date)
@@ -389,6 +450,8 @@ export default function Calendar() {
           endTime: form.endTime,
           description: form.description.trim(),
           weekly,
+          repeatWeekdays,
+          repeatUntil,
           completed: false,
           completedDates: [],
           createdAt: new Date().toISOString(),
@@ -412,6 +475,8 @@ export default function Calendar() {
       endTime: event.endTime,
       description: event.description,
       weekly: event.weekly,
+      repeatWeekdays: event.repeatWeekdays || [],
+      repeatUntil: event.repeatUntil || '',
     });
     setFormError('');
     setFormOpen(true);
@@ -915,20 +980,52 @@ export default function Calendar() {
                 />
               </label>
 
-              {form.category === 'Horário de aulas' && (
-                <label className="calendar-form__repeat calendar-form__field--full">
-                  <input
-                    type="checkbox"
-                    name="weekly"
-                    checked={form.weekly}
-                    onChange={handleFormChange}
-                  />
-                  <span className="calendar-form__repeat-box">✓</span>
-                  <span>
-                    <strong>Repetir toda semana</strong>
-                    <small>Ideal para montar seu horário fixo de aulas.</small>
-                  </span>
-                </label>
+              <label className="calendar-form__repeat calendar-form__field--full">
+                <input
+                  type="checkbox"
+                  name="weekly"
+                  checked={form.weekly}
+                  onChange={handleFormChange}
+                />
+                <span className="calendar-form__repeat-box">✓</span>
+                <span>
+                  <strong>Repetir por semana</strong>
+                  <small>Escolha um ou vários dias e, se quiser, uma data final.</small>
+                </span>
+              </label>
+
+              {form.weekly && (
+                <div className="calendar-repeat-settings calendar-form__field--full">
+                  <div className="calendar-repeat-weekdays">
+                    <span>Repetir todas as:</span>
+                    <div>
+                      {WEEKDAY_OPTIONS.map((weekday) => {
+                        const selected = form.repeatWeekdays.includes(weekday.value);
+                        return (
+                          <button
+                            key={weekday.value}
+                            type="button"
+                            className={selected ? 'selected' : ''}
+                            onClick={() => toggleRepeatWeekday(weekday.value)}
+                            aria-pressed={selected}
+                          >
+                            {weekday.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <label className="calendar-repeat-until">
+                    <span>Repetir até <small>(opcional)</small></span>
+                    <input
+                      type="date"
+                      name="repeatUntil"
+                      min={form.date}
+                      value={form.repeatUntil}
+                      onChange={handleFormChange}
+                    />
+                  </label>
+                </div>
               )}
 
               {formError && (
