@@ -1,6 +1,7 @@
 import { omedSupplemental } from "./omedSupplemental.js";
 import { omedClinicalQuestions } from "./omedClinicalQuestions.js";
 import { omedProfileQuestions } from "./omedProfileQuestions.js";
+import { mentalHealthQuestions } from "./mentalHealthQuestions.js";
 
 const coreOmedQuestions = [
   {
@@ -236,7 +237,7 @@ function normalizeQuestionText(text) {
 }
 
 export const omedQuestions = [...new Map(
-  [...coreOmedQuestions, ...omedSupplemental, ...omedClinicalQuestions, ...omedProfileQuestions]
+  [...coreOmedQuestions, ...omedSupplemental, ...omedClinicalQuestions, ...omedProfileQuestions, ...mentalHealthQuestions]
     .map(addEvidence)
     .map(question => [normalizeQuestionText(question.text), question])
 ).values()];
