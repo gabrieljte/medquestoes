@@ -1,9 +1,14 @@
 const q = (id, area, topic, difficulty, text, options, answer, explanation) => {
   const shift = [...id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % options.length;
+  const groupedTopic = topic.startsWith("Demências")
+    ? "Demências"
+    : topic.startsWith("Depressão")
+      ? "Depressão"
+      : topic;
   return {
     id: `mental-${id}`,
     area,
-    topic,
+    topic: groupedTopic,
     difficulty,
     tag: "Banco geral",
     text,
