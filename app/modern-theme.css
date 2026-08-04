@@ -530,3 +530,11 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .theme-dark .calendar-week-day__heading{border-color:#315048;background:#132e28}
 .theme-dark .calendar-week-day--selected{border-color:#5dc9b5;box-shadow:0 8px 22px rgba(58,180,154,.12)}
 .theme-dark .calendar-month-day--selected{background:#15372f;outline-color:rgba(93,201,181,.45)}
+
+/* Casos clínicos: contraste da resposta-modelo e ações */
+.case-model>div .primary{border-color:#087a6f;background:linear-gradient(135deg,#0a9182,#087266);color:#fff;box-shadow:0 6px 14px rgba(8,124,112,.18)}
+.case-model>div .primary:hover{border-color:#08675f;background:linear-gradient(135deg,#087f72,#075f57)}
+.theme-dark .case-model{border-color:#397d6f;background:#12372f;color:#edf6f2}
+.theme-dark .case-model p{color:#edf6f2}
+.theme-dark .case-model>div button{border-color:#45655d;background:#0b201c;color:#c7d9d3}
+.theme-dark .case-model>div .primary{border-color:#55b7a5;background:linear-gradient(135deg,#0a9182,#087266);color:#fff}
