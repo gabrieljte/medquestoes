@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSyncedStorage } from './syncedStorage.js';
 
 const STORAGE_KEY = 'medquiz-academic-calendar-v1';
 
@@ -262,7 +263,7 @@ function CalendarEventCard({ event, compact = false, onToggle, onEdit, onDelete 
 
 export default function Calendar() {
   const todayKey = dateToKey(new Date());
-  const [events, setEvents] = useState(loadEvents);
+  const [events, setEvents] = useSyncedStorage(STORAGE_KEY, loadEvents());
   const [weekCursor, setWeekCursor] = useState(() => startOfWeek(new Date()));
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(todayKey);
@@ -272,14 +273,6 @@ export default function Calendar() {
   const [editingId, setEditingId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState('');
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-    } catch {
-      // O calendário continua utilizável mesmo se o navegador bloquear o armazenamento.
-    }
-  }, [events]);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekCursor, index)),

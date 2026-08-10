@@ -40,8 +40,9 @@ export async function syncQuestions(questions, userId) {
     .like("id", "omed-%-r%");
   if (cleanupError) throw cleanupError;
 
-  if (cleanQuestions.length) {
-    const rows = cleanQuestions.map(q => toCloudQuestion(q, userId));
+  const personalQuestions = cleanQuestions.filter(question => question.tag === "Importada");
+  if (personalQuestions.length) {
+    const rows = personalQuestions.map(q => toCloudQuestion(q, userId));
     for (let index = 0; index < rows.length; index += 50) {
       const { error } = await supabase
         .from("questions")
@@ -55,9 +56,11 @@ export async function syncQuestions(questions, userId) {
     .select("*")
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data
-    .map(fromCloudQuestion)
-    .filter(question => !/^omed-.+-r\d+$/.test(String(question.id)));
+  const merged = new Map(cleanQuestions.map(question => [String(question.id), question]));
+  data.map(fromCloudQuestion)
+    .filter(question => !/^omed-.+-r\d+$/.test(String(question.id)))
+    .forEach(question => merged.set(String(question.id), question));
+  return [...merged.values()];
 }
 
 export async function saveCloudQuestions(questions, userId) {

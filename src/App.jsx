@@ -13,6 +13,8 @@ import StudyOrganizer from "./StudyOrganizer.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
+import { readableSyncError, useAccountSync } from "./accountSync.js";
+import { useSyncedStorage } from "./syncedStorage.js";
 
 const seed = [
   {
@@ -129,10 +131,7 @@ export default function Home() {
   const [difficulty, setDifficulty] = useState("Todas");
   const [tag, setTag] = useState("Todas");
   const [answerStatus, setAnswerStatus] = useState("Não respondidas");
-  const [activeList, setActiveList] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("medquestoes-active-list") || "null"); }
-    catch { return null; }
-  });
+  const [activeList, setActiveList] = useSyncedStorage("medquestoes-active-list", null);
   const [listExitOpen, setListExitOpen] = useState(false);
   const [simulationNow, setSimulationNow] = useState(Date.now());
   const [reviewedQuestionId, setReviewedQuestionId] = useState(null);
@@ -149,18 +148,18 @@ export default function Home() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    localStorage.getItem("medquestoes-sidebar-collapsed") === "true"
-  );
-  const [theme, setTheme] = useState(() => {
+  const [syncTick, setSyncTick] = useState(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useSyncedStorage("medquestoes-sidebar-collapsed", false);
+  const [theme, setTheme] = useSyncedStorage("medquestoes-theme", (() => {
     const savedTheme = localStorage.getItem("medquestoes-theme");
     if (savedTheme === "dark" || savedTheme === "light") return savedTheme;
     return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
+  })());
   const [importArea, setImportArea] = useState("Cardiologia");
   const [importTopic, setImportTopic] = useState("Doença isquêmica");
   const [draft, setDraft] = useState({ text: "", a: "", b: "", c: "", d: "", answer: "A", explanation: "" });
   const fileRef = useRef(null);
+  const accountSync = useAccountSync(session?.user?.id);
 
   useEffect(() => {
     Promise.all([loadQuestions(seed), loadAttempts()])
@@ -174,9 +173,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("medquestoes-theme", theme);
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const retry = () => setSyncTick(current => current + 1);
+    window.addEventListener("online", retry);
+    window.addEventListener("focus", retry);
+    const interval = window.setInterval(retry, 60000);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("focus", retry);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -212,12 +222,12 @@ export default function Home() {
       setStats({ answered: cloudAttempts.length, correct: cloudAttempts.filter(a => a.correct).length });
     }).catch((error) => {
       console.error("Falha na sincronização:", error);
-      if (active) setSyncError(navigator.onLine ? "Falha ao sincronizar" : "Sem internet");
+       if (active) setSyncError(readableSyncError(error));
     }).finally(() => {
       if (active) setSyncing(false);
     });
     return () => { active = false; };
-  }, [session?.user?.id, databaseReady]);
+  }, [session?.user?.id, databaseReady, syncTick]);
 
   const latestAttemptByQuestion = useMemo(() => {
     const latest = new Map();
@@ -393,7 +403,6 @@ export default function Home() {
   }
   function clearFilters() {
     setActiveList(null);
-    localStorage.removeItem("medquestoes-active-list");
     setArea("Todas"); setTopic("Todos"); setDifficulty("Todas"); setTag("Todas"); setAnswerStatus("Não respondidas"); setSearch("");
     setHasSearched(false); setPage(1);
   }
@@ -404,7 +413,6 @@ export default function Home() {
   function openQuestionBank() {
     if (activeList) {
       setActiveList(null);
-      localStorage.removeItem("medquestoes-active-list");
       setNotice("A lista foi pausada e continua disponível em Listas criadas.");
     }
     setResponses({});
@@ -430,7 +438,6 @@ export default function Home() {
     setListExitOpen(false);
     setSimulationNow(now);
     setActiveList(sessionList);
-    localStorage.setItem("medquestoes-active-list", JSON.stringify(sessionList));
     setResponses(current => {
       const next = { ...current };
       sessionList.ids.forEach(id => {
@@ -447,7 +454,6 @@ export default function Home() {
   function closeCustomList() {
     setListExitOpen(false);
     setActiveList(null);
-    localStorage.removeItem("medquestoes-active-list");
     setHasSearched(false);
     setPage(1);
     setTab("inicio");
@@ -466,17 +472,12 @@ export default function Home() {
     if (!isSimulation) return;
     const finished = { ...activeList, endsAt: new Date().toISOString() };
     setActiveList(finished);
-    localStorage.setItem("medquestoes-active-list", JSON.stringify(finished));
     setSimulationNow(Date.now() + 1000);
     setListExitOpen(false);
     setNotice("Simulado finalizado. O gabarito e o resumo já estão disponíveis.");
   }
   function toggleSidebar() {
-    setSidebarCollapsed(current => {
-      const next = !current;
-      localStorage.setItem("medquestoes-sidebar-collapsed", String(next));
-      return next;
-    });
+    setSidebarCollapsed(current => !current);
   }
   function selectOption(questionId, option) {
     if (sessionFinished) return;
@@ -593,7 +594,7 @@ export default function Home() {
             <div className="level-box"><span>Nível {gameStats.level}</span><div><i style={{ width: `${gameStats.progress}%` }} /></div><small>{gameStats.progress}/100 XP</small></div>
           </div>
           <div className="account-box">
-            <span className={`db-status ${databaseReady && !syncError ? "online" : ""}`} title={syncError}>{syncing ? "↻ Sincronizando" : syncError ? `● ${syncError}` : session ? "● Sincronizado" : "● Modo offline"}</span>
+            <button type="button" className={`db-status ${databaseReady && !syncError && !accountSync.error ? "online" : ""}`} title={syncError || accountSync.error || "Clique para sincronizar agora"} onClick={() => { setSyncTick(current => current + 1); accountSync.retry(); }}>{syncing || accountSync.syncing ? "↻ Sincronizando" : syncError || accountSync.error ? "● Falha ao sincronizar · tentar novamente" : session ? "● Sincronizado" : "● Modo offline"}</button>
             <small>{session?.user?.email || "Neste dispositivo"}</small>
             <button onClick={() => session ? supabase.auth.signOut() : setOfflineMode(false)}>{session ? "Sair" : "Entrar"}</button>
           </div>
@@ -712,7 +713,7 @@ export default function Home() {
       ) : tab === "simulados" ? (
         <ListBuilder key="simulados" mode="simulado" questions={questions} latestAttemptByQuestion={latestAttemptByQuestion} onGenerate={startCustomList} />
       ) : tab === "biblioteca" ? (
-        <Library areas={Object.keys(topicMap)} />
+        <Library areas={Object.keys(topicMap)} userId={session?.user?.id} />
       ) : tab === "casos" ? (
         <ClinicalCases />
       ) : tab === "organizacao" ? (

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSyncedStorage } from "./syncedStorage.js";
 
 const STORAGE_KEY = "medquestoes-osce-progress";
 
@@ -65,11 +66,6 @@ const cases = [
   }
 ];
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
-  catch { return {}; }
-}
-
 export default function ClinicalCases() {
   const [area, setArea] = useState("Todas");
   const [selectedId, setSelectedId] = useState(cases[0].id);
@@ -78,7 +74,7 @@ export default function ClinicalCases() {
   const [revealed, setRevealed] = useState(false);
   const [score, setScore] = useState(0);
   const [completed, setCompleted] = useState(false);
-  const [history, setHistory] = useState(loadHistory);
+  const [history, setHistory] = useSyncedStorage(STORAGE_KEY, {});
 
   const areas = [...new Set(cases.map(item => item.area))].sort();
   const visibleCases = useMemo(() => cases.filter(item => area === "Todas" || item.area === area), [area]);
@@ -94,7 +90,6 @@ export default function ClinicalCases() {
     if (stepIndex === selected.steps.length - 1) {
       const nextHistory = { ...history, [selected.id]: { score: nextScore, total: selected.steps.length, completedAt: new Date().toISOString() } };
       setHistory(nextHistory);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextHistory));
       setScore(nextScore); setCompleted(true);
     } else {
       setScore(nextScore); setStepIndex(index => index + 1); setResponse(""); setRevealed(false);

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSyncedStorage } from "./syncedStorage.js";
 
 const STORAGE_KEY = "medquestoes-study-organizer-v1";
 const EMPTY_DRAFT = {
@@ -17,15 +18,6 @@ const STATUSES = [
   { name: "Revisar", icon: "🔁" },
   { name: "Concluído", icon: "✅" }
 ];
-
-function loadPlans() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch {
-    return [];
-  }
-}
 
 function formatDate(value) {
   if (!value) return "Sem prazo";
@@ -51,17 +43,13 @@ function linkLabel(url) {
 }
 
 export default function StudyOrganizer() {
-  const [plans, setPlans] = useState(loadPlans);
+  const [plans, setPlans] = useSyncedStorage(STORAGE_KEY, []);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState(null);
   const [filter, setFilter] = useState("Todos");
   const [search, setSearch] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [formError, setFormError] = useState("");
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
-  }, [plans]);
 
   const visiblePlans = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");

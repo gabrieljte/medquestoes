@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSyncedStorage } from "./syncedStorage.js";
 
 const SAVED_LISTS_KEY = "medquestoes-saved-lists";
 const SAVED_SIMULATIONS_KEY = "medquestoes-saved-simulations";
@@ -26,11 +27,6 @@ function shuffled(items) {
   return result;
 }
 
-function loadSavedLists(storageKey) {
-  try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); }
-  catch { return []; }
-}
-
 export default function ListBuilder({ questions, latestAttemptByQuestion, onGenerate, mode = "lista" }) {
   const isSimulation = mode === "simulado";
   const storageKey = isSimulation ? SAVED_SIMULATIONS_KEY : SAVED_LISTS_KEY;
@@ -43,7 +39,7 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
   const [quantities, setQuantities] = useState({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState("");
-  const [savedLists, setSavedLists] = useState(() => loadSavedLists(storageKey));
+  const [savedLists, setSavedLists] = useSyncedStorage(storageKey, []);
   const [error, setError] = useState("");
 
   const catalog = useMemo(() => {
@@ -90,7 +86,6 @@ export default function ListBuilder({ questions, latestAttemptByQuestion, onGene
 
   function persistLists(next) {
     setSavedLists(next);
-    localStorage.setItem(storageKey, JSON.stringify(next));
   }
 
   function addArea(area, topic) {

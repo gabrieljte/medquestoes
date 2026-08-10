@@ -4,6 +4,13 @@ import {
   listLibraryImages,
   saveLibraryImage
 } from "./libraryDb.js";
+import {
+  deleteCloudLibraryImage,
+  queueLibraryDeletion,
+  syncLibraryImages,
+  uploadLibraryImage
+} from "./libraryCloud.js";
+import { readableSyncError } from "./accountSync.js";
 
 function normalizeText(value) {
   return String(value || "")
@@ -49,7 +56,7 @@ function readableError(error, fallback) {
   return error?.message || fallback;
 }
 
-export default function Library({ areas = [] }) {
+export default function Library({ areas = [], userId = "" }) {
   const inputRef = useRef(null);
   const [images, setImages] = useState([]);
   const [imageUrls, setImageUrls] = useState({});
@@ -111,23 +118,29 @@ export default function Library({ areas = [] }) {
   useEffect(() => {
     let active = true;
 
-    listLibraryImages()
+    const refresh = () => (userId ? syncLibraryImages(userId) : listLibraryImages())
       .then(records => {
         if (active) setImages(records);
       })
       .catch(loadError => {
         if (active) {
-          setError(readableError(loadError, "Não foi possível abrir a biblioteca."));
+          setError(userId ? readableSyncError(loadError) : readableError(loadError, "Não foi possível abrir a biblioteca."));
         }
       })
       .finally(() => {
         if (active) setLoading(false);
       });
 
+    refresh();
+    const reconnect = () => refresh();
+    window.addEventListener("online", reconnect);
+    window.addEventListener("focus", reconnect);
     return () => {
       active = false;
+      window.removeEventListener("online", reconnect);
+      window.removeEventListener("focus", reconnect);
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!file) {
@@ -220,11 +233,17 @@ export default function Library({ areas = [] }) {
 
     try {
       await saveLibraryImage(record);
-      setImages(current => [record, ...current]);
+      let savedRecord = record;
+      if (userId) {
+        savedRecord = await uploadLibraryImage(record, userId);
+        await saveLibraryImage(savedRecord);
+      }
+      setImages(current => [savedRecord, ...current]);
       resetForm();
-      setMessage("Imagem salva na biblioteca.");
+      setMessage(userId ? "Imagem salva e sincronizada pelo Supabase." : "Imagem salva neste dispositivo.");
     } catch (saveError) {
-      setError(readableError(saveError, "Não foi possível salvar a imagem."));
+      setImages(current => current.some(item => item.id === record.id) ? current : [record, ...current]);
+      setError(userId ? `${readableSyncError(saveError)} A foto ficou salva neste dispositivo e será reenviada.` : readableError(saveError, "Não foi possível salvar a imagem."));
     } finally {
       setSaving(false);
     }
@@ -239,12 +258,22 @@ export default function Library({ areas = [] }) {
 
     clearFeedback();
     setDeletingId(item.id);
+    let cloudDeleteFailed = false;
 
     try {
+      if (userId) {
+        try {
+          await deleteCloudLibraryImage(item, userId);
+        } catch (cloudError) {
+          cloudDeleteFailed = true;
+          queueLibraryDeletion(item);
+          setError(`${readableSyncError(cloudError)} A exclusão será concluída ao reconectar.`);
+        }
+      }
       await deleteLibraryImage(item.id);
       setImages(current => current.filter(image => image.id !== item.id));
       setViewer(current => current?.id === item.id ? null : current);
-      setMessage("Imagem excluída da biblioteca.");
+      if (!cloudDeleteFailed) setMessage("Imagem excluída da biblioteca.");
     } catch (deleteError) {
       setError(readableError(deleteError, "Não foi possível excluir a imagem."));
     } finally {
@@ -410,7 +439,7 @@ export default function Library({ areas = [] }) {
             <div className="library-state library-loading" role="status">
               <span className="library-spinner" />
               <h3>Abrindo sua biblioteca...</h3>
-              <p>As imagens ficam salvas somente neste navegador.</p>
+              <p>{userId ? "Sincronizando imagens com sua conta..." : "As imagens estão disponíveis neste dispositivo."}</p>
             </div>
           ) : visibleImages.length ? (
             <div className="library-grid">
