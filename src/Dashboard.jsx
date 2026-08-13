@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const periods = [
   { value: "7", label: "Última semana" },
@@ -40,6 +40,9 @@ export default function Dashboard({ attempts }) {
   const [period, setPeriod] = useState("30");
   const [selectedMonth, setSelectedMonth] = useState(() => dateKeyInStudyZone(new Date()).slice(0, 7));
   const [area, setArea] = useState("Todas");
+  const [chartEdgeSpace, setChartEdgeSpace] = useState(0);
+  const dailyScrollRef = useRef(null);
+  const todayKey = dateKeyInStudyZone(new Date());
 
   const areas = useMemo(() => [...new Set(attempts.map(a => a.area))].sort(), [attempts]);
   const filtered = useMemo(() => {
@@ -66,7 +69,6 @@ export default function Dashboard({ attempts }) {
   }, [filtered]);
 
   const daily = useMemo(() => {
-    const todayKey = dateKeyInStudyZone(new Date());
     const today = keyToUtcDate(todayKey);
     const configuredDays = ["all", "month"].includes(period) ? null : Number(period);
     const firstAttemptKey = [...filtered]
@@ -78,6 +80,7 @@ export default function Dashboard({ attempts }) {
       const [year, month] = selectedMonth.split("-").map(Number);
       start = new Date(Date.UTC(year, month - 1, 1, 12));
       end = new Date(Date.UTC(year, month, 0, 12));
+      if (selectedMonth === todayKey.slice(0, 7)) end = today;
     } else {
       start = configuredDays
         ? new Date(today.getTime() - (configuredDays - 1) * 86400000)
@@ -103,7 +106,36 @@ export default function Dashboard({ attempts }) {
       });
     }
     return days;
-  }, [filtered, period, selectedMonth]);
+  }, [filtered, period, selectedMonth, todayKey]);
+
+  useEffect(() => {
+    const scroll = dailyScrollRef.current;
+    if (!scroll) return undefined;
+    const measure = () => setChartEdgeSpace(Math.max(0, (scroll.clientWidth - 48) / 2));
+    measure();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(scroll);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  useEffect(() => {
+    const scroll = dailyScrollRef.current;
+    if (!scroll || !daily.length) return;
+    const target = scroll.querySelector(`[data-day-key="${todayKey}"]`) ||
+      scroll.querySelector(".daily-column:last-of-type");
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      scroll.scrollTo({
+        left: target.offsetLeft - scroll.clientWidth / 2 + target.offsetWidth / 2,
+        behavior: "auto"
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [area, period, selectedMonth, chartEdgeSpace, daily.length, todayKey]);
   const periodLabel = period === "month"
     ? new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" })
       .format(keyToUtcDate(`${selectedMonth}-01`))
@@ -131,13 +163,13 @@ export default function Dashboard({ attempts }) {
       </div>
       <div className="metric-grid"><div className="metric"><span>Questões respondidas</span><b>{filtered.length}</b></div><div className="metric"><span>Respostas corretas</span><b>{correct}</b></div><div className="metric"><span>Melhor sequência</span><b>🔥 {lifetimeGame.best}</b></div><div className="metric accent"><span>Aproveitamento</span><b>{rate}%</b></div></div>
       <div className="chart-card daily-card"><div className="chart-title"><div><h2>Evolução dia após dia</h2><small>Quantidade respondida e acertos em cada dia</small></div><span>{periodLabel}</span></div>
-        {daily.length ? <div className="daily-scroll"><div className="daily-chart" style={{ width: `${Math.max(680, daily.length * 56)}px` }}>
+        {daily.length ? <div className="daily-scroll" ref={dailyScrollRef}><div className="daily-chart" style={{ width: `${Math.max(680, daily.length * 56 + chartEdgeSpace * 2 + 8)}px`, paddingLeft: `${chartEdgeSpace + 4}px`, paddingRight: `${chartEdgeSpace + 4}px` }}>
           {daily.map(day => {
             const height = day.total ? Math.max(12, day.total / dailyMax * 100) : 3;
             const correctHeight = day.total ? day.correct / day.total * 100 : 0;
             const errors = day.total - day.correct;
             const rate = day.total ? Math.round(day.correct / day.total * 100) : 0;
-            return <button className="daily-column" key={day.key} type="button" aria-label={`${day.fullLabel}: ${day.correct} acertos e ${errors} erros`}>
+            return <button className={`daily-column ${day.key === todayKey ? "is-today" : ""}`} data-day-key={day.key} key={day.key} type="button" aria-label={`${day.fullLabel}: ${day.correct} acertos e ${errors} erros`}>
               <span className="daily-tooltip"><b>{day.fullLabel}</b><span>{day.total} respondidas</span><span className="tooltip-correct">● {day.correct} acertos</span><span className="tooltip-wrong">● {errors} erros</span><strong>{rate}% de aproveitamento</strong></span>
               <div className="daily-value">{day.total || ""}</div>
               <div className="daily-bar-track"><div className={`daily-bar ${day.total ? "" : "empty"}`} style={{ height: `${height}%` }}><span style={{ height: `${correctHeight}%` }} /></div></div>

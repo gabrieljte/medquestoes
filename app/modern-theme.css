@@ -165,6 +165,7 @@ nav button.active{background:#fff;color:var(--teal);box-shadow:0 3px 12px rgba(3
 .daily-bar>span{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#17a989,#087c70)}
 .daily-bar.empty{background:#eaf0ed}
 .daily-column small{display:block;width:48px;font-size:9px;color:var(--muted);white-space:nowrap;align-self:center;text-align:center}
+.daily-column.is-today small{color:var(--teal);font-weight:800}.daily-column.is-today small::after{content:"Hoje";display:block;font-size:8px;line-height:1;color:var(--teal)}
 .daily-legend{display:flex;justify-content:flex-end;gap:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:10px}
 .daily-legend span{display:flex;align-items:center;gap:6px}
 .daily-legend i{width:9px;height:9px;border-radius:3px}
