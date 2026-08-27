@@ -13,6 +13,7 @@ import StudyOrganizer from "./StudyOrganizer.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
+import { neuroStudyQuestions } from "./neuroStudyQuestions.js";
 import { readableSyncError, useAccountSync } from "./accountSync.js";
 import { useSyncedStorage } from "./syncedStorage.js";
 
@@ -65,12 +66,13 @@ const seed = [
     options: ["Primordial", "Primária", "Secundária", "Terciária"],
     answer: 1, explanation: "A vacinação é proteção específica e integra a prevenção primária."
   },
-  ...omedQuestions
+  ...omedQuestions,
+  ...neuroStudyQuestions
 ];
 
 const topicMap = {
   "Cardiologia": ["Doença isquêmica", "Eletrocardiograma", "Taquiarritmias", "Insuficiência cardíaca"],
-  "Neurologia": ["Doenças cerebrovasculares", "Epilepsia", "Cefaleias", "Demências"],
+  "Neurologia": ["Doenças cerebrovasculares", "Epilepsia", "Cefaleias", "Demências", "Neuroanatomia", "Semiologia Neurológica"],
   "Oncologia": ["Rastreamento", "Cuidados paliativos", "Tumores sólidos"],
   "Cirurgia Geral": ["Abdome agudo", "Trauma", "Pré e pós-operatório"],
   "Medicina de Família e Comunidade": ["Prevenção", "Atenção primária", "Saúde coletiva"],
