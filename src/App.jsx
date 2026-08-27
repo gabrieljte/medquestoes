@@ -93,6 +93,11 @@ for (const question of omedQuestions) {
 }
 
 const letters = ["A", "B", "C", "D", "E"];
+const tabMeta = {
+  inicio: ["⌂", "Visão geral"], questoes: ["✚", "Banco de questões"], listas: ["≡", "Listas inteligentes"],
+  simulados: ["◷", "Simulados"], biblioteca: ["▦", "Biblioteca"], casos: ["♟", "Casos clínicos"],
+  organizacao: ["✓", "Plano de estudos"], calendario: ["□", "Agenda acadêmica"], dashboard: ["↗", "Desempenho"], adicionar: ["＋", "Adicionar questões"]
+};
 
 function parseQuestions(raw, fallbackArea, fallbackTopic) {
   const blocks = raw.replace(/\r/g, "").split(/\n\s*(?:---+|\d+[.)]\s+(?=\S))/).map(s => s.trim()).filter(Boolean);
@@ -569,12 +574,15 @@ export default function Home() {
         </button>
         <div className="brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Banco de questões médicas</small></div></div>
         <nav aria-label="Navegação principal">
+          <span className="nav-group-label">PLATAFORMA</span>
           <button title="Início" className={tab === "inicio" ? "active" : ""} onClick={() => setTab("inicio")}><span>🏠</span><b>Início</b></button>
+          <span className="nav-group-label">APRENDER</span>
           <button title="Questões" className={tab === "questoes" ? "active" : ""} onClick={openQuestionBank}><span>📝</span><b>Questões</b></button>
           <button title="Listas" className={tab === "listas" ? "active" : ""} onClick={() => setTab("listas")}><span>📋</span><b>Listas</b></button>
           <button title="Simulados" className={tab === "simulados" ? "active" : ""} onClick={() => setTab("simulados")}><span>⏱️</span><b>Simulados</b></button>
           <button title="Biblioteca" className={tab === "biblioteca" ? "active" : ""} onClick={() => setTab("biblioteca")}><span>📚</span><b>Biblioteca</b></button>
           <button title="Casos clínicos" className={tab === "casos" ? "active" : ""} onClick={() => setTab("casos")}><span>🩺</span><b>Casos clínicos</b></button>
+          <span className="nav-group-label">ORGANIZAR</span>
           <button title="Organização" className={tab === "organizacao" ? "active" : ""} onClick={() => setTab("organizacao")}><span>🗂️</span><b>Organização</b></button>
           <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>📅</span><b>Calendário</b></button>
           <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>📊</span><b>Desempenho</b></button>
@@ -604,6 +612,14 @@ export default function Home() {
       </aside>
 
       <div className="app-content">
+      <header className="academy-topbar">
+        <div className="academy-breadcrumb"><span>{tabMeta[tab]?.[0] || "✚"}</span><div><small>MEDQUESTÕES ACADEMY</small><b>{tabMeta[tab]?.[1] || "Área de estudo"}</b></div></div>
+        <div className="academy-topbar__actions">
+          <button type="button" className="academy-topbar__calendar" onClick={() => setTab("calendario")}><span>📅</span><div><small>Organize seu dia</small><b>Agenda acadêmica</b></div></button>
+          <button type="button" className="academy-topbar__theme" onClick={() => setTheme(current => current === "light" ? "dark" : "light")} aria-label="Alternar tema">{theme === "light" ? "☀" : "☾"}</button>
+          <div className="academy-user"><span>{(session?.user?.email || "M").charAt(0).toUpperCase()}</span><div><b>Minha conta</b><small>{session?.user?.email || "Modo local"}</small></div></div>
+        </div>
+      </header>
       {tab === "inicio" ? (
         <HomeDashboard
           questionCount={questions.length}
