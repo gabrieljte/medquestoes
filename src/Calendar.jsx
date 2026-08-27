@@ -5,6 +5,7 @@ const STORAGE_KEY = 'medquiz-academic-calendar-v1';
 
 const CATEGORIES = [
   'Horário de aulas',
+  'Estudos',
   'Provas',
   'Atividades',
   'Ambulatórios',
@@ -13,6 +14,7 @@ const CATEGORIES = [
 
 const CATEGORY_META = {
   'Horário de aulas': { icon: '🎓', slug: 'aulas' },
+  Estudos: { icon: '📖', slug: 'estudos' },
   Provas: { icon: '📝', slug: 'provas' },
   Atividades: { icon: '✅', slug: 'atividades' },
   Ambulatórios: { icon: '🩺', slug: 'ambulatorios' },
