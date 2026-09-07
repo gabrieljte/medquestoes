@@ -6,7 +6,7 @@ let databasePromise;
 
 function getIndexedDb() {
   if (typeof indexedDB === "undefined") {
-    throw new Error("O banco de imagens não está disponível neste navegador.");
+    throw new Error("A biblioteca não está disponível neste navegador.");
   }
 
   return indexedDB;
@@ -110,7 +110,7 @@ export async function listLibraryImages() {
 
 export async function saveLibraryImage(record) {
   if (!record?.id || !record?.area || !(record?.image instanceof Blob)) {
-    throw new Error("Os dados da imagem estão incompletos.");
+    throw new Error("Os dados do arquivo estão incompletos.");
   }
 
   await runRequest("readwrite", store => store.put(record));
@@ -121,4 +121,3 @@ export async function deleteLibraryImage(id) {
   if (!id) return;
   await runRequest("readwrite", store => store.delete(id));
 }
-

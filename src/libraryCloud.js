@@ -10,12 +10,12 @@ function cloudRecord(record, userId, storagePath) {
     id: String(record.id),
     area: record.area,
     description: record.description || "",
-    file_name: record.fileName || "imagem",
+    file_name: record.fileName || "arquivo",
     mime_type: record.mimeType || record.image?.type || "image/jpeg",
     size: record.size || record.image?.size || 0,
     storage_path: storagePath,
     created_at: record.createdAt || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: record.updatedAt || new Date().toISOString(),
     deleted_at: null
   };
 }
@@ -42,7 +42,7 @@ export function queueLibraryDeletion(item) {
 
 export async function uploadLibraryImage(record, userId) {
   if (!supabase || !userId) return record;
-  const extension = String(record.fileName || "image.jpg").split(".").pop().replace(/[^a-z0-9]/gi, "") || "jpg";
+  const extension = String(record.fileName || "arquivo.bin").split(".").pop().replace(/[^a-z0-9]/gi, "") || "bin";
   const path = `${userId}/${record.id}.${extension}`;
   const { error: storageError } = await supabase.storage
     .from(BUCKET)
@@ -53,7 +53,16 @@ export async function uploadLibraryImage(record, userId) {
     .from("library_items")
     .upsert(cloudRecord(record, userId, path), { onConflict: "user_id,id" });
   if (error) throw error;
-  return { ...record, storagePath: path };
+  return { ...record, storagePath: path, metadataPending: false };
+}
+
+export async function updateLibraryMetadata(record, userId) {
+  if (!supabase || !userId) return record;
+  if (!record.storagePath) return uploadLibraryImage(record, userId);
+  const { error } = await supabase.from("library_items")
+    .upsert(cloudRecord(record, userId, record.storagePath), { onConflict: "user_id,id" });
+  if (error) throw error;
+  return { ...record, metadataPending: false };
 }
 
 async function flushDeletions(userId) {
@@ -107,8 +116,10 @@ export async function syncLibraryImages(userId) {
       const uploaded = await uploadLibraryImage(record, userId);
       await saveLibraryImage(uploaded);
       cloudById.set(String(record.id), cloudRecord(uploaded, userId, uploaded.storagePath));
-    } else if (!record.storagePath && cloud.storage_path) {
-      await saveLibraryImage({ ...record, storagePath: cloud.storage_path });
+    } else if (record.metadataPending && String(record.updatedAt || "") > String(cloud.updated_at || "")) {
+      await saveLibraryImage(await updateLibraryMetadata({ ...record, storagePath: cloud.storage_path }, userId));
+    } else {
+      await saveLibraryImage({ ...record, area: cloud.area, description: cloud.description || "", storagePath: cloud.storage_path, updatedAt: cloud.updated_at, metadataPending: false });
     }
   }
 
@@ -125,11 +136,12 @@ export async function syncLibraryImages(userId) {
       area: row.area,
       description: row.description || "",
       image: blob,
-      fileName: row.file_name || "imagem",
+      fileName: row.file_name || "arquivo",
       mimeType: row.mime_type || blob.type,
       size: row.size || blob.size,
       storagePath: row.storage_path,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     });
   }
   return listLibraryImages();

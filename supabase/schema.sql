@@ -106,7 +106,7 @@ create policy "Users update own app data" on public.user_data
 create policy "Users delete own app data" on public.user_data
   for delete to authenticated using ((select auth.uid()) = user_id);
 
--- Metadados da biblioteca; os arquivos ficam no Supabase Storage.
+-- Metadados da biblioteca multimídia; os arquivos ficam no Supabase Storage.
 create table if not exists public.library_items (
   user_id uuid not null references auth.users(id) on delete cascade,
   id text not null,
@@ -145,8 +145,11 @@ values (
   'library-images',
   'library-images',
   false,
-  10485760,
-  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']
+  52428800,
+  array[
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/mpeg'
+  ]
 )
 on conflict (id) do update set
   public = excluded.public,

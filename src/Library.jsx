@@ -10,6 +10,7 @@ import {
   syncLibraryImages,
   uploadLibraryImage
 } from "./libraryCloud.js";
+import { updateLibraryMetadata } from "./libraryCloud.js";
 import { readableSyncError } from "./accountSync.js";
 
 function normalizeText(value) {
@@ -40,17 +41,25 @@ function formatDate(value) {
   }
 }
 
+function isVideo(item) {
+  return String(item?.mimeType || item?.image?.type || "").startsWith("video/");
+}
+
+function mediaLabel(item) {
+  return isVideo(item) ? "Vídeo" : "Imagem";
+}
+
 function makeId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
 
-  return `image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `media-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function readableError(error, fallback) {
   if (error?.name === "QuotaExceededError") {
-    return "O espaço reservado para imagens neste navegador está cheio.";
+    return "O espaço reservado para a biblioteca neste navegador está cheio.";
   }
 
   return error?.message || fallback;
@@ -65,8 +74,11 @@ export default function Library({ areas = [], userId = "" }) {
   const [area, setArea] = useState("");
   const [description, setDescription] = useState("");
   const [areaFilter, setAreaFilter] = useState("Todas");
+  const [typeFilter, setTypeFilter] = useState("Todos");
   const [search, setSearch] = useState("");
   const [viewer, setViewer] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [editingBusy, setEditingBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -103,9 +115,10 @@ export default function Library({ areas = [], userId = "" }) {
       const haystack = normalizeText(
         `${item.description || ""} ${item.area || ""} ${item.fileName || ""}`
       );
-      return matchesArea && (!query || haystack.includes(query));
+      const matchesType = typeFilter === "Todos" || (typeFilter === "Vídeos" ? isVideo(item) : !isVideo(item));
+      return matchesArea && matchesType && (!query || haystack.includes(query));
     });
-  }, [areaFilter, images, search]);
+  }, [areaFilter, images, search, typeFilter]);
 
   useEffect(() => {
     setArea(current =>
@@ -183,10 +196,18 @@ export default function Library({ areas = [], userId = "" }) {
       return;
     }
 
-    if (!selectedFile.type.startsWith("image/")) {
+    const validType = selectedFile.type.startsWith("image/") || selectedFile.type.startsWith("video/");
+    if (!validType) {
       setFile(null);
       event.target.value = "";
-      setError("Escolha um arquivo de imagem válido.");
+      setError("Escolha uma imagem ou um vídeo válido.");
+      return;
+    }
+
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setFile(null);
+      event.target.value = "";
+      setError("O arquivo deve ter no máximo 50 MB.");
       return;
     }
 
@@ -204,17 +225,17 @@ export default function Library({ areas = [], userId = "" }) {
     clearFeedback();
 
     if (!file) {
-      setError("Selecione uma imagem para adicionar.");
+      setError("Selecione uma imagem ou um vídeo para adicionar.");
       return;
     }
 
     if (!area) {
-      setError("Selecione a especialidade da imagem.");
+      setError("Selecione a especialidade do arquivo.");
       return;
     }
 
     if (!description.trim()) {
-      setError("Escreva uma breve descrição da imagem.");
+      setError("Escreva uma breve descrição do arquivo.");
       return;
     }
 
@@ -230,9 +251,11 @@ export default function Library({ areas = [], userId = "" }) {
     };
 
     setSaving(true);
+    let locallySaved = false;
 
     try {
       await saveLibraryImage(record);
+      locallySaved = true;
       let savedRecord = record;
       if (userId) {
         savedRecord = await uploadLibraryImage(record, userId);
@@ -240,18 +263,52 @@ export default function Library({ areas = [], userId = "" }) {
       }
       setImages(current => [savedRecord, ...current]);
       resetForm();
-      setMessage(userId ? "Imagem salva e sincronizada pelo Supabase." : "Imagem salva neste dispositivo.");
+      setMessage(userId ? `${mediaLabel(record)} salvo e sincronizado pelo Supabase.` : `${mediaLabel(record)} salvo neste dispositivo.`);
     } catch (saveError) {
-      setImages(current => current.some(item => item.id === record.id) ? current : [record, ...current]);
-      setError(userId ? `${readableSyncError(saveError)} A foto ficou salva neste dispositivo e será reenviada.` : readableError(saveError, "Não foi possível salvar a imagem."));
+      if (locallySaved) {
+        setImages(current => current.some(item => item.id === record.id) ? current : [record, ...current]);
+        resetForm();
+      }
+      const detail = /mime|maximum allowed size|exceeded.*size/i.test(String(saveError?.message || ""))
+        ? "O armazenamento da conta ainda precisa ser habilitado para vídeos."
+        : readableSyncError(saveError);
+      setError(locallySaved ? `${detail} O arquivo ficou salvo neste dispositivo e será reenviado ao reconectar ou reabrir a Biblioteca.` : readableError(saveError, "Não foi possível salvar o arquivo."));
     } finally {
       setSaving(false);
     }
   }
 
+  async function saveEdit(event) {
+    event.preventDefault();
+    if (!editing || editingBusy || !editing.area || !editing.description.trim()) return;
+    setEditingBusy(true);
+    clearFeedback();
+    const original = images.find(item => item.id === editing.id);
+    const record = { ...original, area: editing.area, description: editing.description.trim(), updatedAt: new Date().toISOString(), metadataPending: true };
+    let locallySaved = false;
+    try {
+      await saveLibraryImage(record);
+      locallySaved = true;
+      setImages(items => items.map(item => item.id === record.id ? record : item));
+      setViewer(item => item?.id === record.id ? record : item);
+      if (userId) {
+        const synced = await updateLibraryMetadata(record, userId);
+        await saveLibraryImage(synced);
+        setImages(items => items.map(item => item.id === record.id ? synced : item));
+      }
+      setEditing(null);
+      setMessage(userId ? "Alterações salvas e sincronizadas." : "Alterações salvas neste dispositivo.");
+    } catch (editError) {
+      if (locallySaved) setEditing(null);
+      setError(locallySaved ? "Alterações salvas neste dispositivo. A sincronização será tentada ao reconectar ou reabrir a Biblioteca." : readableError(editError, "Não foi possível salvar as alterações."));
+    } finally {
+      setEditingBusy(false);
+    }
+  }
+
   async function handleDelete(item) {
     const confirmed = window.confirm(
-      `Excluir esta imagem de ${item.area}? Esta ação não poderá ser desfeita.`
+      `Excluir este ${mediaLabel(item).toLocaleLowerCase("pt-BR")} de ${item.area}? Esta ação não poderá ser desfeita.`
     );
 
     if (!confirmed) return;
@@ -273,7 +330,7 @@ export default function Library({ areas = [], userId = "" }) {
       await deleteLibraryImage(item.id);
       setImages(current => current.filter(image => image.id !== item.id));
       setViewer(current => current?.id === item.id ? null : current);
-      if (!cloudDeleteFailed) setMessage("Imagem excluída da biblioteca.");
+      if (!cloudDeleteFailed) setMessage(`${mediaLabel(item)} excluído da biblioteca.`);
     } catch (deleteError) {
       setError(readableError(deleteError, "Não foi possível excluir a imagem."));
     } finally {
@@ -286,15 +343,14 @@ export default function Library({ areas = [], userId = "" }) {
       <div className="library-heading">
         <div>
           <span className="library-eyebrow">ACERVO PESSOAL</span>
-          <h1>Biblioteca de imagens</h1>
+          <h1>Biblioteca multimídia</h1>
           <p>
-            Guarde achados, exames e imagens importantes organizados por
-            especialidade.
+            Guarde imagens, exames e vídeos importantes organizados por especialidade.
           </p>
         </div>
         <div className="library-total">
           <b>{images.length}</b>
-          <span>{images.length === 1 ? "imagem salva" : "imagens salvas"}</span>
+          <span>{images.length === 1 ? "item salvo" : "itens salvos"}</span>
         </div>
       </div>
 
@@ -316,7 +372,7 @@ export default function Library({ areas = [], userId = "" }) {
           <div className="library-panel-title">
             <span className="library-panel-icon">＋</span>
             <div>
-              <h2>Adicionar imagem</h2>
+              <h2>Adicionar mídia</h2>
               <p>Preencha os dados para guardar no acervo.</p>
             </div>
           </div>
@@ -328,19 +384,23 @@ export default function Library({ areas = [], userId = "" }) {
               <input
                 ref={inputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 onChange={handleFileChange}
               />
               {previewUrl ? (
                 <>
-                  <img src={previewUrl} alt="Pré-visualização da imagem selecionada" />
-                  <span className="library-replace-image">Trocar imagem</span>
+                  {file?.type.startsWith("video/") ? (
+                    <video src={previewUrl} controls muted playsInline aria-label="Pré-visualização do vídeo selecionado" />
+                  ) : (
+                    <img src={previewUrl} alt="Pré-visualização da imagem selecionada" />
+                  )}
+                  <span className="library-replace-image">Trocar arquivo</span>
                 </>
               ) : (
                 <span className="library-file-empty">
                   <b>↑</b>
-                  <strong>Escolher uma foto</strong>
-                  <small>JPG, PNG, WEBP ou outra imagem</small>
+                  <strong>Escolher foto ou vídeo</strong>
+                  <small>Imagens e vídeos de até 50 MB. Prefira MP4 para assistir no celular.</small>
                 </span>
               )}
             </label>
@@ -374,7 +434,7 @@ export default function Library({ areas = [], userId = "" }) {
               <textarea
                 value={description}
                 onChange={event => setDescription(event.target.value)}
-                placeholder="Ex.: Radiografia com consolidação em lobo inferior direito..."
+                placeholder="Ex.: Radiografia com consolidação ou aula sobre exame neurológico..."
                 rows={4}
                 maxLength={600}
                 required
@@ -400,7 +460,7 @@ export default function Library({ areas = [], userId = "" }) {
                 value={search}
                 onChange={event => setSearch(event.target.value)}
                 placeholder="Buscar por descrição ou arquivo..."
-                aria-label="Buscar imagens"
+                aria-label="Buscar itens da biblioteca"
               />
               {search && (
                 <button
@@ -411,6 +471,15 @@ export default function Library({ areas = [], userId = "" }) {
                   ×
                 </button>
               )}
+            </label>
+
+            <label className="library-filter">
+              <span>Tipo</span>
+              <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
+                <option value="Todos">Todos</option>
+                <option value="Imagens">Imagens</option>
+                <option value="Vídeos">Vídeos</option>
+              </select>
             </label>
 
             <label className="library-filter">
@@ -439,7 +508,7 @@ export default function Library({ areas = [], userId = "" }) {
             <div className="library-state library-loading" role="status">
               <span className="library-spinner" />
               <h3>Abrindo sua biblioteca...</h3>
-              <p>{userId ? "Sincronizando imagens com sua conta..." : "As imagens estão disponíveis neste dispositivo."}</p>
+              <p>{userId ? "Sincronizando seu acervo com a conta..." : "Os arquivos estão disponíveis neste dispositivo."}</p>
             </div>
           ) : visibleImages.length ? (
             <div className="library-grid">
@@ -449,34 +518,36 @@ export default function Library({ areas = [], userId = "" }) {
                     className="library-card-preview"
                     type="button"
                     onClick={() => setViewer(item)}
-                    aria-label={`Ampliar imagem: ${item.description}`}
+                    aria-label={`Abrir ${mediaLabel(item).toLocaleLowerCase("pt-BR")}: ${item.description}`}
                   >
                     {imageUrls[item.id] ? (
-                      <img
-                        src={imageUrls[item.id]}
-                        alt={item.description || `Imagem de ${item.area}`}
-                        loading="lazy"
-                      />
+                      isVideo(item) ? (
+                        <video src={imageUrls[item.id]} muted playsInline preload="metadata" />
+                      ) : (
+                        <img src={imageUrls[item.id]} alt={item.description || `Imagem de ${item.area}`} loading="lazy" />
+                      )
                     ) : (
-                      <span className="library-image-placeholder">Imagem</span>
+                      <span className="library-image-placeholder">{mediaLabel(item)}</span>
                     )}
+                    {isVideo(item) && <span className="library-play-icon" aria-hidden="true">▶</span>}
                     <span className="library-expand-icon" aria-hidden="true">↗</span>
                   </button>
 
                   <div className="library-card-body">
                     <div className="library-card-topline">
-                      <span className="library-area-badge">{item.area}</span>
+                      <div><span className="library-area-badge">{item.area}</span><span className="library-type-badge">{mediaLabel(item)}</span></div>
                       <span>{formatDate(item.createdAt)}</span>
                     </div>
                     <p>{item.description}</p>
                     <div className="library-card-footer">
-                      <span title={item.fileName}>{item.fileName || "Imagem"}</span>
+                      <button type="button" className="library-edit-button" onClick={() => setEditing({ id: item.id, area: item.area, description: item.description || "" })}>Editar</button>
+                      <span title={item.fileName}>{item.fileName || mediaLabel(item)}</span>
                       <button
                         type="button"
                         className="library-delete-button"
                         onClick={() => handleDelete(item)}
                         disabled={deletingId === item.id}
-                        aria-label={`Excluir imagem: ${item.description}`}
+                        aria-label={`Excluir ${mediaLabel(item).toLocaleLowerCase("pt-BR")}: ${item.description}`}
                       >
                         {deletingId === item.id ? "Excluindo..." : "Excluir"}
                       </button>
@@ -490,13 +561,13 @@ export default function Library({ areas = [], userId = "" }) {
               <span className="library-empty-icon" aria-hidden="true">▧</span>
               <h3>
                 {images.length
-                  ? "Nenhuma imagem corresponde aos filtros"
+                  ? "Nenhum item corresponde aos filtros"
                   : "Sua biblioteca ainda está vazia"}
               </h3>
               <p>
                 {images.length
                   ? "Tente outra busca ou selecione todas as especialidades."
-                  : "Adicione a primeira imagem usando o formulário ao lado."}
+                  : "Adicione a primeira imagem ou vídeo usando o formulário ao lado."}
               </p>
               {images.length > 0 && (
                 <button
@@ -504,6 +575,7 @@ export default function Library({ areas = [], userId = "" }) {
                   onClick={() => {
                     setSearch("");
                     setAreaFilter("Todas");
+                    setTypeFilter("Todos");
                   }}
                 >
                   Limpar filtros
@@ -514,12 +586,23 @@ export default function Library({ areas = [], userId = "" }) {
         </div>
       </div>
 
+      {editing && (
+        <div className="library-viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="library-edit-title">
+          <form className="library-viewer library-edit-dialog" onSubmit={saveEdit} onKeyDown={event => { if (event.key === "Escape" && !editingBusy) setEditing(null); }}>
+            <h2 id="library-edit-title">Editar item da biblioteca</h2>
+            <label className="library-field"><span>Especialidade</span><select value={editing.area} onChange={event => setEditing(item => ({ ...item, area: event.target.value }))} disabled={editingBusy} required>{filterAreas.map(value => <option key={value}>{value}</option>)}</select></label>
+            <label className="library-field"><span>Descrição</span><textarea autoFocus rows={6} maxLength={600} value={editing.description} onChange={event => setEditing(item => ({ ...item, description: event.target.value }))} disabled={editingBusy} required /></label>
+            <div className="library-edit-actions"><button type="button" className="library-edit-button" disabled={editingBusy} onClick={() => setEditing(null)}>Cancelar</button><button className="library-save-button" disabled={editingBusy || !editing.description.trim()}>{editingBusy ? "Salvando…" : "Salvar alterações"}</button></div>
+          </form>
+        </div>
+      )}
+
       {viewer && (
         <div
           className="library-viewer-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="Visualização da imagem"
+          aria-label={`Visualização de ${mediaLabel(viewer).toLocaleLowerCase("pt-BR")}`}
           onMouseDown={event => {
             if (event.target === event.currentTarget) setViewer(null);
           }}
@@ -533,14 +616,13 @@ export default function Library({ areas = [], userId = "" }) {
             >
               ×
             </button>
-            {imageUrls[viewer.id] && (
-              <img
-                src={imageUrls[viewer.id]}
-                alt={viewer.description || `Imagem de ${viewer.area}`}
-              />
-            )}
+            {imageUrls[viewer.id] && (isVideo(viewer) ? (
+              <video src={imageUrls[viewer.id]} controls playsInline preload="metadata" />
+            ) : (
+              <img src={imageUrls[viewer.id]} alt={viewer.description || `Imagem de ${viewer.area}`} />
+            ))}
             <div className="library-viewer-caption">
-              <span className="library-area-badge">{viewer.area}</span>
+              <span className="library-area-badge">{viewer.area}</span> <span className="library-type-badge">{mediaLabel(viewer)}</span>
               <p>{viewer.description}</p>
               <small>{viewer.fileName}</small>
             </div>
