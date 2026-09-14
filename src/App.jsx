@@ -10,6 +10,7 @@ import ClinicalCases from "./ClinicalCases.jsx";
 import Calendar from "./Calendar.jsx";
 import HomeDashboard from "./HomeDashboard.jsx";
 import StudyOrganizer from "./StudyOrganizer.jsx";
+import CongressRadar from "./CongressRadar.jsx";
 import { cloudConfigured, supabase } from "./supabase.js";
 import { saveCloudAttempt, saveCloudQuestions, syncAttempts, syncQuestions } from "./cloud.js";
 import { omedQuestions } from "./omedQuestions.js";
@@ -96,7 +97,7 @@ const letters = ["A", "B", "C", "D", "E"];
 const tabMeta = {
   inicio: ["⌂", "Visão geral"], questoes: ["✚", "Banco de questões"], listas: ["≡", "Listas inteligentes"],
   simulados: ["◷", "Simulados"], biblioteca: ["▦", "Biblioteca"], casos: ["♟", "Casos clínicos"],
-  organizacao: ["✓", "Plano de estudos"], calendario: ["□", "Agenda acadêmica"], dashboard: ["↗", "Desempenho"], adicionar: ["＋", "Adicionar questões"]
+  organizacao: ["✓", "Plano de estudos"], calendario: ["□", "Agenda acadêmica"], curriculo: ["◎", "Currículo médico"], dashboard: ["↗", "Desempenho"], adicionar: ["＋", "Adicionar questões"]
 };
 
 function parseQuestions(raw, fallbackArea, fallbackTopic) {
@@ -585,6 +586,7 @@ export default function Home() {
           <span className="nav-group-label">ORGANIZAR</span>
           <button title="Organização" className={tab === "organizacao" ? "active" : ""} onClick={() => setTab("organizacao")}><span>🗂️</span><b>Organização</b></button>
           <button title="Calendário" className={tab === "calendario" ? "active" : ""} onClick={() => setTab("calendario")}><span>📅</span><b>Calendário</b></button>
+          <button title="Currículo médico" className={tab === "curriculo" ? "active" : ""} onClick={() => setTab("curriculo")}><span>🎓</span><b>Currículo médico</b></button>
           <button title="Desempenho" className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}><span>📊</span><b>Desempenho</b></button>
           <button title="Adicionar" className={tab === "adicionar" ? "active" : ""} onClick={() => setTab("adicionar")}><span>➕</span><b>Adicionar</b></button>
         </nav>
@@ -738,6 +740,8 @@ export default function Home() {
         <StudyOrganizer />
       ) : tab === "calendario" ? (
         <Calendar />
+      ) : tab === "curriculo" ? (
+        <CongressRadar />
       ) : tab === "dashboard" ? (
         <Dashboard attempts={attempts} />
       ) : (

@@ -7,6 +7,7 @@ export const SYNCED_STORAGE_KEYS = [
   "medquestoes-saved-lists",
   "medquestoes-saved-simulations",
   "medquestoes-active-list",
+  "medquestoes-congress-watchlist-v1",
   "medquestoes-theme",
   "medquestoes-sidebar-collapsed"
 ];
