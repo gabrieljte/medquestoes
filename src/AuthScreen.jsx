@@ -45,9 +45,9 @@ export default function AuthScreen({ onOffline }) {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="brand auth-brand"><span className="logo">✚</span><div><b>MedQuestões</b><small>Seus estudos sincronizados</small></div></div>
+        <div className="brand auth-brand"><span className="logo">✚</span><div><b>MedPlanner</b><small>Seus estudos sincronizados</small></div></div>
         <h1>{mode === "login" ? "Entre na sua conta" : "Crie sua conta"}</h1>
-        <p>Use a mesma conta no celular e no computador para manter questões e desempenho sincronizados.</p>
+        <p>Use a mesma conta no celular e no computador para sincronizar seu cronograma, calendário, provas e caderno de erros.</p>
         {!cloudConfigured && <div className="auth-warning">A sincronização ainda precisa das variáveis do Supabase. Você pode continuar no modo offline.</div>}
         <form onSubmit={submit} autoComplete="on">
           <label>E-mail<input type="email" name="username" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" /></label>

@@ -275,6 +275,8 @@ export default function Calendar() {
   const [editingId, setEditingId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState('');
+  const [view, setView] = useState('week');
+  const [expanded, setExpanded] = useState(false);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekCursor, index)),
@@ -528,13 +530,14 @@ export default function Calendar() {
   )}`;
 
   return (
-    <section className="calendar-page">
+    <section className={`calendar-page planner-calendar view-${view} ${expanded ? 'calendar-expanded' : ''}`}>
       <header className="calendar-header">
         <div className="calendar-header__text">
           <span className="calendar-eyebrow">Organização acadêmica</span>
           <h1>Meu calendário</h1>
           <p>Veja sua semana, organize compromissos e não perca nenhum prazo.</p>
         </div>
+        <div className="planner-calendar-controls"><button type="button" onClick={() => setView('week')} aria-pressed={view === 'week'}>Semana</button><button type="button" onClick={() => setView('month')} aria-pressed={view === 'month'}>Mês</button><button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? '✕ Sair da tela cheia' : '⛶ Expandir'}</button></div>
         <button type="button" className="calendar-primary-button" onClick={() => openNewEvent()}>
           <span aria-hidden="true">＋</span> Novo compromisso
         </button>

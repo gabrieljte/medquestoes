@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 export const SYNCED_STORAGE_KEYS = [
+  "medplanner-blocks-v1",
+  "medplanner-settings-v1",
+  "medplanner-errors-v1",
+  "medplanner-exams-v1",
   "medquestoes-study-organizer-v1",
   "medquiz-academic-calendar-v1",
   "medquestoes-osce-progress",
