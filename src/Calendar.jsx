@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSyncedStorage } from './syncedStorage.js';
 
 const STORAGE_KEY = 'medquiz-academic-calendar-v1';
@@ -263,6 +263,33 @@ function CalendarEventCard({ event, compact = false, onToggle, onEdit, onDelete 
   );
 }
 
+function timeMinutes(value) { const [hours,minutes]=value.split(':').map(Number); return hours*60+minutes; }
+function timelineLayout(events) {
+  const ordered=[...events].sort((a,b)=>timeMinutes(a.startTime)-timeMinutes(b.startTime));
+  const result=[];
+  let cluster=[],end=-1;
+  function flush(){
+    const lanes=[];
+    for(const item of cluster){let lane=lanes.findIndex(until=>until<=timeMinutes(item.startTime));if(lane<0)lane=lanes.length;lanes[lane]=timeMinutes(item.endTime);item.lane=lane;}
+    result.push(...cluster.map(item=>({...item,lanes:lanes.length})));
+    cluster=[];
+  }
+  for(const event of ordered){const from=timeMinutes(event.startTime),until=timeMinutes(event.endTime);if(from>=end&&cluster.length)flush();if(!cluster.length)end=until;cluster.push({...event});end=Math.max(end,until);}
+  flush();return result;
+}
+
+function WeekTimeline({days,events,categories,todayKey,selectedDate,onSelect,onAdd,onEdit}){
+  const scrollRef=useRef(null);
+  useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=6*64},[]);
+  return <div className="gcal-time-scroll" ref={scrollRef}>
+    <div className="gcal-time-header"><span>GMT−4</span>{days.map(day=>{const key=dateToKey(day);return <button key={key} className={`${key===todayKey?'is-today':''} ${key===selectedDate?'is-selected':''}`} onClick={()=>onSelect(day)}><span>{WEEKDAYS[(day.getDay()+6)%7]}</span><b>{day.getDate()}</b></button>})}</div>
+    <div className="gcal-time-body"><div className="gcal-hours">{Array.from({length:24},(_,hour)=><span key={hour} style={{top:hour*64}}>{String(hour).padStart(2,'0')}:00</span>)}</div>{days.map(day=>{const key=dateToKey(day),items=timelineLayout(eventsForDate(events,key,categories));return <div className="gcal-time-day" key={key}>
+      {Array.from({length:24},(_,hour)=><button className="gcal-time-slot" key={hour} style={{top:hour*64}} onClick={()=>onAdd(key,hour)} aria-label={`Adicionar ${formatLongDate(key)} às ${hour} horas`}/>)}
+      {items.map(event=>{const from=timeMinutes(event.startTime),duration=Math.max(20,timeMinutes(event.endTime)-from);return <button key={event.id} className={`gcal-time-event gcal-color-${CATEGORY_META[event.category].slug} ${isOccurrenceCompleted(event,key)?'is-complete':''}`} style={{top:from*64/60,height:Math.max(23,duration*64/60-2),left:`calc(${event.lane/event.lanes*100}% + 2px)`,width:`calc(${100/event.lanes}% - 4px)`}} onClick={()=>onEdit(event)} title={`${event.title} · ${event.startTime}–${event.endTime}`}><b>{event.title}</b><small>{event.startTime}–{event.endTime}</small></button>})}
+    </div>})}</div>
+  </div>
+}
+
 export default function Calendar() {
   const todayKey = dateToKey(new Date());
   const [events, setEvents] = useSyncedStorage(STORAGE_KEY, loadEvents());
@@ -277,6 +304,10 @@ export default function Calendar() {
   const [formError, setFormError] = useState('');
   const [view, setView] = useState('week');
   const [expanded, setExpanded] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showDay, setShowDay] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  useEffect(()=>{function escape(event){if(event.key==='Escape')setExpanded(false)}window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape)},[]);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekCursor, index)),
@@ -480,16 +511,7 @@ export default function Calendar() {
   }
 
   function deleteEvent(event) {
-    const message = event.weekly
-      ? `Excluir todas as ocorrências semanais de “${event.title}”?`
-      : `Excluir “${event.title}”?`;
-    if (window.confirm(message)) {
-      setEvents((current) => current.filter((item) => item.id !== event.id));
-      if (editingId === event.id) {
-        resetForm();
-        setFormOpen(false);
-      }
-    }
+    setDeleteCandidate(event);
   }
 
   function toggleCompleted(event) {
@@ -530,14 +552,14 @@ export default function Calendar() {
   )}`;
 
   return (
-    <section className={`calendar-page planner-calendar view-${view} ${expanded ? 'calendar-expanded' : ''}`}>
+    <section className={`calendar-page planner-calendar gcal-page view-${view} ${expanded ? 'calendar-expanded' : ''} ${showFilters?'gcal-filters-open':''} ${showDay?'gcal-show-day':''}`}>
       <header className="calendar-header">
         <div className="calendar-header__text">
           <span className="calendar-eyebrow">Organização acadêmica</span>
-          <h1>Meu calendário</h1>
-          <p>Veja sua semana, organize compromissos e não perca nenhum prazo.</p>
+          <h1>Calendário</h1>
+          <p>Seu tempo, bem organizado.</p>
         </div>
-        <div className="planner-calendar-controls"><button type="button" onClick={() => setView('week')} aria-pressed={view === 'week'}>Semana</button><button type="button" onClick={() => setView('month')} aria-pressed={view === 'month'}>Mês</button><button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? '✕ Sair da tela cheia' : '⛶ Expandir'}</button></div>
+        <div className="planner-calendar-controls"><button className="gcal-mobile-filters" onClick={()=>setShowFilters(!showFilters)} aria-expanded={showFilters}>☷ Filtros</button><button type="button" onClick={() => setView('week')} aria-pressed={view === 'week'}>Semana</button><button type="button" onClick={() => setView('month')} aria-pressed={view === 'month'}>Mês</button><button className="gcal-agenda-toggle" onClick={()=>setShowDay(!showDay)} aria-expanded={showDay}>Agenda</button><button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? '✕ Sair da tela cheia' : '⛶ Expandir'}</button></div>
         <button type="button" className="calendar-primary-button" onClick={() => openNewEvent()}>
           <span aria-hidden="true">＋</span> Novo compromisso
         </button>
@@ -615,8 +637,13 @@ export default function Calendar() {
       </section>
 
       <div className="calendar-filters" aria-label="Filtros do calendário">
+        <button className="gcal-create" onClick={()=>openNewEvent()}>＋ Criar compromisso</button>
+        <div className="gcal-mini">
+          <div><b>{formatMonth(monthCursor)}</b><button onClick={()=>setMonthCursor(current=>shiftMonth(current,-1))} aria-label="Mês anterior no minicalendário">‹</button><button onClick={()=>setMonthCursor(current=>shiftMonth(current,1))} aria-label="Próximo mês no minicalendário">›</button></div>
+          <div className="gcal-mini-grid">{WEEKDAYS.map(name=><span key={name}>{name.slice(0,1)}</span>)}{monthDays.map(day=>{const key=dateToKey(day);return <button key={key} className={`${key===todayKey?'is-today':''} ${key===selectedDate?'is-selected':''} ${day.getMonth()!==monthCursor.getMonth()?'is-outside':''}`} onClick={()=>{selectMonthDay(day);setWeekCursor(startOfWeek(day))}} aria-label={`Ir para ${formatLongDate(key)}`}>{day.getDate()}</button>})}</div>
+        </div>
         <div className="calendar-filters__label">
-          <span>Filtrar agenda</span>
+          <span>Minhas categorias</span>
           <small>{activeCategories.size} de {CATEGORIES.length} categorias</small>
         </div>
         <label className="calendar-search">
@@ -703,58 +730,10 @@ export default function Calendar() {
         </div>
 
         <div className="calendar-week__range">{weekLabel}</div>
-        <div className="calendar-week__grid">
-          {weekDays.map((day) => {
-            const key = dateToKey(day);
-            const dayEvents = eventsForDate(filteredEvents, key, visibleCategorySet);
-            return (
-              <div
-                key={key}
-                className={[
-                  'calendar-week-day',
-                  key === todayKey ? 'calendar-week-day--today' : '',
-                  key === selectedDate ? 'calendar-week-day--selected' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                <button
-                  type="button"
-                  className="calendar-week-day__heading"
-                  onClick={() => {
-                    setSelectedDate(key);
-                    setMonthCursor(startOfMonth(day));
-                  }}
-                >
-                  <span>{WEEKDAYS[(day.getDay() + 6) % 7]}</span>
-                  <strong>{day.getDate()}</strong>
-                </button>
-                <div className="calendar-week-day__events">
-                  {dayEvents.length === 0 ? (
-                    <button
-                      type="button"
-                      className="calendar-week-day__empty"
-                      onClick={() => openNewEvent(key)}
-                    >
-                      <span>＋</span> Adicionar
-                    </button>
-                  ) : (
-                    dayEvents.map((event) => (
-                      <CalendarEventCard
-                        key={`${event.id}-${key}`}
-                        event={event}
-                        compact
-                        onToggle={toggleCompleted}
-                        onEdit={editEvent}
-                        onDelete={deleteEvent}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <WeekTimeline days={weekDays} events={filteredEvents} categories={visibleCategorySet} todayKey={todayKey} selectedDate={selectedDate}
+          onSelect={day=>{setSelectedDate(dateToKey(day));setMonthCursor(startOfMonth(day))}}
+          onAdd={(key,hour)=>{openNewEvent(key);setForm(current=>({...current,startTime:`${String(hour).padStart(2,'0')}:00`,endTime:hour===23?'23:59':`${String(hour+1).padStart(2,'0')}:00`}))}}
+          onEdit={editEvent} />
       </section>
 
       <div className="calendar-workspace">
@@ -809,7 +788,7 @@ export default function Calendar() {
                   ]
                     .filter(Boolean)
                     .join(' ')}
-                  onClick={() => selectMonthDay(day)}
+                  onClick={() => { selectMonthDay(day); setShowDay(true); }}
                   aria-label={`${formatLongDate(key)}, ${dayEvents.length} compromissos`}
                 >
                   <span className="calendar-month-day__number">{day.getDate()}</span>
@@ -841,6 +820,7 @@ export default function Calendar() {
         </section>
 
         <aside className="calendar-day-panel">
+          <button className="gcal-day-close" onClick={()=>setShowDay(false)}>✕ Fechar agenda</button>
           <div className="calendar-day-panel__header">
             <div>
               <span className="calendar-section-kicker">Agenda do dia</span>
@@ -881,6 +861,7 @@ export default function Calendar() {
         </aside>
       </div>
 
+      {deleteCandidate && <div className="calendar-modal" role="presentation" onMouseDown={()=>setDeleteCandidate(null)}><section className="calendar-modal__dialog gcal-confirm" role="dialog" aria-modal="true" aria-labelledby="gcal-delete-title" onMouseDown={event=>event.stopPropagation()}><h2 id="gcal-delete-title">Excluir compromisso?</h2><p>{deleteCandidate.weekly?'Todas as repetições de ':'Você vai excluir '}<b>{deleteCandidate.title}</b>.</p><div><button onClick={()=>setDeleteCandidate(null)}>Cancelar</button><button className="primary" onClick={()=>{setEvents(current=>current.filter(event=>event.id!==deleteCandidate.id));if(editingId===deleteCandidate.id){resetForm();setFormOpen(false)}setDeleteCandidate(null)}}>Confirmar exclusão</button></div></section></div>}
       {formOpen && (
         <div className="calendar-modal" role="presentation" onMouseDown={() => setFormOpen(false)}>
           <div
