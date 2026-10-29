@@ -10,6 +10,7 @@ import { supabase } from './supabase.js';
 import { useSyncedStorage } from './syncedStorage.js';
 import '../app/planner.css';
 import '../app/workspace.css';
+import '../app/schedule.css';
 
 const sections = [['cronograma','📋','Cronograma'],['calendario','📅','Calendário'],['provas','🎯','Minhas provas'],['erros','📒','Caderno de erros'],['organizacao','🗂️','Plano de estudos'],['biblioteca','📚','Biblioteca'],['curriculo','🎓','Currículo médico']];
 export default function OrganizationShell({session,theme,setTheme,areas,onLogin}) {
